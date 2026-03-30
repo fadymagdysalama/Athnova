@@ -261,15 +261,15 @@ export const useSessionStore = create<SessionState>((set) => ({
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: 'Not authenticated' };
 
-    const { data: deletedRows, error } = await supabase
+    const { count, error } = await supabase
       .from('session_clients')
-      .delete()
-      .select('session_id')
+      .delete({ count: 'exact' })
       .eq('session_id', sessionId)
       .eq('client_id', user.id);
 
     if (error) return { error: error.message };
-    if (!deletedRows || deletedRows.length === 0) return { error: 'cancel_failed' };
+    // count === 0 means RLS silently blocked the delete (no rows removed)
+    if (count === 0) return { error: 'cancel_failed' };
 
     const today = new Date();
     const todayStr = `${today.getFullYear()}-${zeroPad(today.getMonth() + 1)}-${zeroPad(today.getDate())}`;

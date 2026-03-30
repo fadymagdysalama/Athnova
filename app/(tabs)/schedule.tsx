@@ -69,9 +69,10 @@ function SessionCard({
     ? session.clients.length > 0
       ? session.clients.map((c) => c.display_name).join(', ')
       : t('schedule.noParticipants')
-    : session.coachProfile
-    ? t('schedule.with', { name: session.coachProfile.display_name })
     : '';
+
+  // For clients: only show badge when NOT scheduled (i.e. cancelled or completed)
+  const showStatusBadge = isCoach || session.status !== 'scheduled';
 
   const showCancelBtn = !isCoach && onCancel && session.status === 'scheduled';
 
@@ -90,14 +91,16 @@ function SessionCard({
                 </Text>
               </View>
             )}
-            <View style={[styles.statusBadge, { backgroundColor: sColor + '18' }]}>
-              <Text style={[styles.statusText, { color: sColor }]}>
-                {t(`schedule.${session.status}` as any)}
-              </Text>
-            </View>
+            {showStatusBadge && (
+              <View style={[styles.statusBadge, { backgroundColor: sColor + '18' }]}>
+                <Text style={[styles.statusText, { color: sColor }]}>
+                  {t(`schedule.${session.status}` as any)}
+                </Text>
+              </View>
+            )}
           </View>
           <Text style={styles.cardMeta}>{t('schedule.min', { count: session.duration_minutes })}</Text>
-          {subtitle ? (
+          {isCoach && subtitle ? (
             <Text style={styles.cardParticipants} numberOfLines={1}>{subtitle}</Text>
           ) : null}
           {session.notes ? (
@@ -108,14 +111,16 @@ function SessionCard({
 
       {showCancelBtn && (
         <TouchableOpacity
-          style={[styles.cancelBtn, canceling && styles.cancelBtnDisabled]}
+          style={[styles.bookBtn, { backgroundColor: colors.error }, canceling && styles.bookBtnDisabled]}
           onPress={onCancel}
           disabled={canceling}
           activeOpacity={0.8}
         >
-          {canceling
-            ? <ActivityIndicator size="small" color={colors.textInverse} />
-            : <Text style={styles.cancelBtnText}>{t('common.cancel')}</Text>}
+          {canceling ? (
+            <ActivityIndicator size="small" color={colors.textInverse} />
+          ) : (
+            <Text style={styles.bookBtnText}>{t('common.cancel')}</Text>
+          )}
         </TouchableOpacity>
       )}
     </View>
@@ -243,11 +248,11 @@ export default function ScheduleScreen() {
   async function handleCancel(session: SessionWithClients) {
     Alert.alert(
       t('schedule.confirmLeave'),
-      '',
+      t('schedule.leaveSession'),
       [
         { text: t('common.back'), style: 'cancel' },
         {
-          text: t('common.cancel'),
+          text: t('schedule.leaveSession'),
           style: 'destructive',
           onPress: async () => {
             setCancelingId(session.id);
@@ -256,6 +261,10 @@ export default function ScheduleScreen() {
             if (error) {
               const message = error === 'cancel_failed' ? t('schedule.cancelBookingFailed') : error;
               Alert.alert(t('common.error'), message);
+            } else {
+              // Re-fetch from DB to guarantee UI matches real state
+              await fetchSessions(viewYear, viewMonth, profile!.role);
+              if (myCoach?.id) await fetchAvailableCoachSessions(myCoach.id);
             }
           },
         },
@@ -453,6 +462,7 @@ const styles = StyleSheet.create({
   // Booked session card
   sessionCard: {
     flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.card,
     borderRadius: borderRadius.md,
     marginBottom: spacing.sm,
@@ -543,11 +553,10 @@ const styles = StyleSheet.create({
   },
   bookBtn: {
     backgroundColor: colors.accent,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
     margin: spacing.sm,
     borderRadius: borderRadius.sm,
-    minWidth: 60,
     alignItems: 'center',
   },
   bookBtnDisabled: { opacity: 0.6 },
@@ -557,22 +566,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // Cancel button on client session card
-  cancelBtn: {
-    backgroundColor: colors.error,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    margin: spacing.sm,
-    borderRadius: borderRadius.sm,
-    minWidth: 60,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  cancelBtnDisabled: { opacity: 0.6 },
-  cancelBtnText: {
-    color: colors.textInverse,
-    fontSize: fontSize.sm,
-    fontWeight: '700' as const,
-  },
+  // (Cancel button reuses bookBtn/bookBtnText styles — no extra styles needed)
 });
 
