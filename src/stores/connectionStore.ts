@@ -1,0 +1,197 @@
+import { create } from 'zustand';
+import { supabase } from '../lib/supabase';
+import type { CoachClientRequest, Profile } from '../types';
+
+interface ClientWithRequest {
+  profile: Profile;
+  request: CoachClientRequest;
+}
+
+interface ConnectionState {
+  // Coach side
+  pendingRequests: ClientWithRequest[];
+  clients: ClientWithRequest[];
+  // Client side
+  myCoach: Profile | null;
+  myRequest: CoachClientRequest | null;
+
+  isLoading: boolean;
+
+  // Coach actions
+  fetchCoachData: () => Promise<void>;
+  acceptRequest: (requestId: string) => Promise<{ error: string | null }>;
+  rejectRequest: (requestId: string) => Promise<{ error: string | null }>;
+  removeClient: (requestId: string) => Promise<{ error: string | null }>;
+
+  // Client actions
+  fetchClientData: () => Promise<void>;
+  sendRequest: (coachUsername: string) => Promise<{ error: string | null }>;
+  cancelRequest: () => Promise<{ error: string | null }>;
+  disconnectFromCoach: () => Promise<{ error: string | null }>;
+}
+
+export const useConnectionStore = create<ConnectionState>((set, get) => ({
+  pendingRequests: [],
+  clients: [],
+  myCoach: null,
+  myRequest: null,
+  isLoading: false,
+
+  fetchCoachData: async () => {
+    set({ isLoading: true });
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return set({ isLoading: false });
+
+    const { data: requests } = await supabase
+      .from('coach_client_requests')
+      .select('*, client:profiles!coach_client_requests_client_id_fkey(*)')
+      .eq('coach_id', user.id)
+      .in('status', ['pending', 'accepted'])
+      .order('created_at', { ascending: false });
+
+    const pending: ClientWithRequest[] = [];
+    const accepted: ClientWithRequest[] = [];
+
+    (requests ?? []).forEach((r: any) => {
+      const item = { profile: r.client, request: r };
+      if (r.status === 'pending') pending.push(item);
+      else accepted.push(item);
+    });
+
+    set({ pendingRequests: pending, clients: accepted, isLoading: false });
+  },
+
+  acceptRequest: async (requestId: string) => {
+    const { error } = await supabase
+      .from('coach_client_requests')
+      .update({ status: 'accepted' })
+      .eq('id', requestId);
+
+    if (error) return { error: error.message };
+    await get().fetchCoachData();
+    return { error: null };
+  },
+
+  rejectRequest: async (requestId: string) => {
+    const { error } = await supabase
+      .from('coach_client_requests')
+      .update({ status: 'rejected' })
+      .eq('id', requestId);
+
+    if (error) return { error: error.message };
+    await get().fetchCoachData();
+    return { error: null };
+  },
+
+  removeClient: async (requestId: string) => {
+    const { error } = await supabase
+      .from('coach_client_requests')
+      .update({ status: 'rejected' })
+      .eq('id', requestId);
+
+    if (error) return { error: error.message };
+    await get().fetchCoachData();
+    return { error: null };
+  },
+
+  fetchClientData: async () => {
+    set({ isLoading: true });
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return set({ isLoading: false });
+
+    const { data: request } = await supabase
+      .from('coach_client_requests')
+      .select('*, coach:profiles!coach_client_requests_coach_id_fkey(*)')
+      .eq('client_id', user.id)
+      .not('status', 'eq', 'rejected')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (request) {
+      set({
+        myRequest: request,
+        myCoach: request.status === 'accepted' ? request.coach : null,
+        isLoading: false,
+      });
+    } else {
+      set({ myRequest: null, myCoach: null, isLoading: false });
+    }
+  },
+
+  sendRequest: async (coachUsername: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: 'Not authenticated' };
+
+    const trimmed = coachUsername.trim().toLowerCase();
+    if (!trimmed) return { error: 'Please enter a coach username' };
+
+    // Find the coach by username
+    const { data: coach } = await supabase
+      .from('profiles')
+      .select('id, role')
+      .eq('username', trimmed)
+      .single();
+
+    if (!coach) return { error: 'Coach not found. Check the username and try again.' };
+    if (coach.role !== 'coach') return { error: 'That user is not a coach.' };
+    if (coach.id === user.id) return { error: 'You cannot connect with yourself.' };
+
+    // Check for existing request
+    const { data: existing } = await supabase
+      .from('coach_client_requests')
+      .select('id, status')
+      .eq('coach_id', coach.id)
+      .eq('client_id', user.id)
+      .maybeSingle();
+
+    if (existing) {
+      if (existing.status === 'pending') return { error: 'Request already sent. Waiting for coach to respond.' };
+      if (existing.status === 'accepted') return { error: 'You are already connected with this coach.' };
+      // If rejected, allow re-sending by updating
+      const { error } = await supabase
+        .from('coach_client_requests')
+        .update({ status: 'pending' })
+        .eq('id', existing.id);
+      if (error) return { error: error.message };
+      await get().fetchClientData();
+      return { error: null };
+    }
+
+    const { error } = await supabase
+      .from('coach_client_requests')
+      .insert({ coach_id: coach.id, client_id: user.id, status: 'pending' });
+
+    if (error) return { error: error.message };
+    await get().fetchClientData();
+    return { error: null };
+  },
+
+  cancelRequest: async () => {
+    const { myRequest } = get();
+    if (!myRequest) return { error: 'No active request' };
+
+    const { error } = await supabase
+      .from('coach_client_requests')
+      .update({ status: 'rejected' })
+      .eq('id', myRequest.id);
+
+    if (error) return { error: error.message };
+    set({ myRequest: null, myCoach: null });
+    return { error: null };
+  },
+
+  disconnectFromCoach: async () => {
+    const { myRequest } = get();
+    if (!myRequest) return { error: 'No active connection' };
+
+    const { error } = await supabase
+      .from('coach_client_requests')
+      .update({ status: 'rejected' })
+      .eq('id', myRequest.id);
+
+    if (error) return { error: error.message };
+    set({ myRequest: null, myCoach: null });
+    return { error: null };
+  },
+}));
