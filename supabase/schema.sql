@@ -483,3 +483,122 @@ CREATE POLICY "Coaches can view client strength logs" ON strength_logs
       AND coach_client_requests.status = 'accepted'
     )
   );
+
+-- =====================================================
+-- PHASE 5 MIGRATION — Push Notifications
+-- Run these statements in the Supabase SQL Editor
+-- after the initial schema has been applied.
+-- =====================================================
+
+-- 1. Add Expo push token column to profiles
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS expo_push_token TEXT;
+
+-- 2. Notifications RLS — the send-push Edge Function uses the service role key
+--    and therefore bypasses RLS automatically. No additional INSERT policy is
+--    needed for the service role. The existing SELECT/UPDATE client policies
+--    are sufficient for in-app notification reads.
+
+-- =====================================================
+-- PHASE 6 MIGRATION — Marketplace & Subscriptions
+-- Run these statements in the Supabase SQL Editor
+-- after the Phase 5 migration has been applied.
+-- =====================================================
+
+-- 1. Coach subscription tiers
+CREATE TABLE IF NOT EXISTS coach_subscriptions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  coach_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE UNIQUE,
+  tier TEXT NOT NULL DEFAULT 'starter' CHECK (tier IN ('starter', 'pro', 'business')),
+  payment_ref TEXT,
+  current_period_end TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_coach_subscriptions_coach ON coach_subscriptions(coach_id);
+
+-- RLS for coach_subscriptions
+ALTER TABLE coach_subscriptions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Coaches can view own subscription" ON coach_subscriptions
+  FOR SELECT USING (auth.uid() = coach_id);
+CREATE POLICY "Coaches can insert own subscription" ON coach_subscriptions
+  FOR INSERT WITH CHECK (auth.uid() = coach_id);
+CREATE POLICY "Coaches can update own subscription" ON coach_subscriptions
+  FOR UPDATE USING (auth.uid() = coach_id);
+
+-- 2. Paymob webhook inserts bypass RLS via service role -- no additional policy needed.
+--    program_purchases already has INSERT policy "Clients can create purchases" for client_id = auth.uid().
+--    The paymob-webhook Edge Function uses service role key and bypasses RLS.
+
+-- 3. Ensure program_purchases index for fast lookup
+CREATE INDEX IF NOT EXISTS idx_program_purchases_client ON program_purchases(client_id);
+CREATE INDEX IF NOT EXISTS idx_program_purchases_program ON program_purchases(program_id);
+
+-- 3. Session reminders via pg_cron (requires the pg_cron extension).
+--    Enable the extension from the Supabase dashboard → Extensions → pg_cron.
+--    Then schedule the reminder Edge Functions below:
+--
+--    -- 24-hour reminder (runs daily at 08:00 UTC)
+--    SELECT cron.schedule(
+--      'session-reminders-24h',
+--      '0 8 * * *',
+--      $$
+--        SELECT net.http_post(
+--          url := 'https://pmfieyesclymxcvhulor.supabase.co/functions/v1/session-reminders',
+--          headers := jsonb_build_object(
+--            'Content-Type', 'application/json',
+--            'Authorization', 'Bearer <SERVICE_ROLE_KEY>'
+--          ),
+--          body := '{"window_hours": 24}'::jsonb
+--        );
+--      $$
+--    );
+--
+--    -- 1-hour reminder (runs every hour)
+--    SELECT cron.schedule(
+--      'session-reminders-1h',
+--      '0 * * * *',
+--      $$
+--        SELECT net.http_post(
+--          url := 'https://pmfieyesclymxcvhulor.supabase.co/functions/v1/session-reminders',
+--          headers := jsonb_build_object(
+--            'Content-Type', 'application/json',
+--            'Authorization', 'Bearer <SERVICE_ROLE_KEY>'
+--          ),
+--          body := '{"window_hours": 1}'::jsonb
+--        );
+--      $$
+--    );
+
+-- =====================================================
+-- PHASE 7 MIGRATION — Progress Tracking
+-- =====================================================
+-- The body_measurements, progress_photos, and strength_logs
+-- tables and their RLS policies are already defined in the
+-- base schema above.
+--
+-- Storage bucket for progress photos:
+-- Run the following in the Supabase SQL Editor (Storage section)
+-- or from the Dashboard → Storage → New bucket:
+--
+--   INSERT INTO storage.buckets (id, name, public)
+--   VALUES ('progress-photos', 'progress-photos', true)
+--   ON CONFLICT (id) DO NOTHING;
+--
+-- Then add storage object policies (run in SQL Editor):
+--
+--   CREATE POLICY "Users upload own photos" ON storage.objects
+--     FOR INSERT WITH CHECK (
+--       bucket_id = 'progress-photos'
+--       AND auth.uid()::text = (storage.foldername(name))[1]
+--     );
+--
+--   CREATE POLICY "Progress photos publicly readable" ON storage.objects
+--     FOR SELECT USING (bucket_id = 'progress-photos');
+--
+--   CREATE POLICY "Users delete own photos" ON storage.objects
+--     FOR DELETE USING (
+--       bucket_id = 'progress-photos'
+--       AND auth.uid()::text = (storage.foldername(name))[1]
+--     );
+

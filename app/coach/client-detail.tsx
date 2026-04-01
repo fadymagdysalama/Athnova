@@ -118,6 +118,19 @@ export default function ClientDetailScreen() {
           </View>
         </View>
 
+        {/* Progress */}
+        <TouchableOpacity
+          style={styles.progressButton}
+          onPress={() =>
+            router.push({
+              pathname: '/coach/client-progress',
+              params: { clientId, clientName: client.display_name },
+            })
+          }
+        >
+          <Text style={styles.progressButtonText}>📊  {t('progress.viewProgress')}</Text>
+        </TouchableOpacity>
+
         {/* Danger zone */}
         <View style={styles.dangerSection}>
           <TouchableOpacity style={styles.removeButton} onPress={handleRemove}>
@@ -221,6 +234,21 @@ const styles = StyleSheet.create({
   infoLabel: {
     fontSize: fontSize.sm,
     color: colors.textMuted,
+  },
+
+  // Progress button
+  progressButton: {
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.md,
+    padding: spacing.lg,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  progressButtonText: {
+    fontSize: fontSize.md,
+    fontWeight: '600',
+    color: colors.primary,
   },
 
   // Danger zone

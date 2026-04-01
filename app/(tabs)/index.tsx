@@ -1,8 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import { useAuthStore } from '../../src/stores/authStore';
+import { useNotificationStore } from '../../src/stores/notificationStore';
 import { colors, fontSize, spacing, borderRadius } from '../../src/constants/theme';
 
 function StatCard({ label, value, icon }: { label: string; value: string; icon: string }) {
@@ -18,6 +20,7 @@ function StatCard({ label, value, icon }: { label: string; value: string; icon: 
 export default function HomeScreen() {
   const { t } = useTranslation();
   const { profile } = useAuthStore();
+  const { unreadCount } = useNotificationStore();
 
   if (!profile) return null;
 
@@ -31,12 +34,30 @@ export default function HomeScreen() {
       >
         {/* Greeting */}
         <View style={styles.header}>
-          <Text style={styles.greeting}>
-            {t('home.greeting', { name: profile.display_name })}
-          </Text>
-          <Text style={styles.dashboardLabel}>
-            {isCoach ? t('home.coachDashboard') : t('home.clientDashboard')}
-          </Text>
+          <View style={styles.headerRow}>
+            <View style={styles.headerText}>
+              <Text style={styles.greeting}>
+                {t('home.greeting', { name: profile.display_name })}
+              </Text>
+              <Text style={styles.dashboardLabel}>
+                {isCoach ? t('home.coachDashboard') : t('home.clientDashboard')}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.bellButton}
+              onPress={() => router.push('/notifications')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.bellIcon}>🔔</Text>
+              {unreadCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {unreadCount > 99 ? '99+' : String(unreadCount)}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Quick Stats */}
@@ -93,6 +114,47 @@ const styles = StyleSheet.create({
   header: {
     paddingTop: spacing.xl,
     marginBottom: spacing['2xl'],
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  headerText: {
+    flex: 1,
+    paddingRight: spacing.md,
+  },
+  bellButton: {
+    position: 'relative',
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  bellIcon: { fontSize: 20 },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.error,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: colors.background,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+    lineHeight: 13,
   },
   greeting: {
     fontSize: fontSize['2xl'],

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
+import { sendNotification } from '../lib/sendNotification';
 import type { CoachClientRequest, Profile } from '../types';
 
 interface ClientWithRequest {
@@ -62,23 +63,50 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
   },
 
   acceptRequest: async (requestId: string) => {
+    // Find the client before updating so we can send the notification
+    const pending = get().pendingRequests.find((r) => r.request.id === requestId);
+
     const { error } = await supabase
       .from('coach_client_requests')
       .update({ status: 'accepted' })
       .eq('id', requestId);
 
     if (error) return { error: error.message };
+
+    if (pending) {
+      sendNotification({
+        recipient_id: pending.profile.id,
+        type: 'connection_accepted',
+        title: 'Request Accepted! 🎉',
+        body: 'Your coach accepted your connection request. You are now connected!',
+        data: { request_type: 'accepted' },
+      });
+    }
+
     await get().fetchCoachData();
     return { error: null };
   },
 
   rejectRequest: async (requestId: string) => {
+    const pending = get().pendingRequests.find((r) => r.request.id === requestId);
+
     const { error } = await supabase
       .from('coach_client_requests')
       .update({ status: 'rejected' })
       .eq('id', requestId);
 
     if (error) return { error: error.message };
+
+    if (pending) {
+      sendNotification({
+        recipient_id: pending.profile.id,
+        type: 'connection_rejected',
+        title: 'Request Update',
+        body: 'Your coach declined your connection request.',
+        data: { request_type: 'rejected' },
+      });
+    }
+
     await get().fetchCoachData();
     return { error: null };
   },
@@ -154,6 +182,14 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
         .update({ status: 'pending' })
         .eq('id', existing.id);
       if (error) return { error: error.message };
+      // Notify coach of the re-sent request
+      sendNotification({
+        recipient_id: coach.id,
+        type: 'connection_request',
+        title: 'New Connection Request 🤝',
+        body: 'A client wants to connect with you.',
+        data: { request_type: 'new_request' },
+      });
       await get().fetchClientData();
       return { error: null };
     }
@@ -163,6 +199,16 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
       .insert({ coach_id: coach.id, client_id: user.id, status: 'pending' });
 
     if (error) return { error: error.message };
+
+    // Notify the coach
+    sendNotification({
+      recipient_id: coach.id,
+      type: 'connection_request',
+      title: 'New Connection Request 🤝',
+      body: 'A client wants to connect with you.',
+      data: { request_type: 'new_request' },
+    });
+
     await get().fetchClientData();
     return { error: null };
   },

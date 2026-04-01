@@ -34,7 +34,16 @@
       "expo-router",
       "expo-localization",
       "expo-secure-store",
-      "expo-image-picker"
+      "expo-image-picker",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/adaptive-icon.png",
+          "color": "#ffffff",
+          "defaultChannel": "default",
+          "sounds": []
+        }
+      ]
     ]
   }
 }

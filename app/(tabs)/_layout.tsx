@@ -12,6 +12,7 @@ function TabIcon({ name, focused }: { name: string; focused: boolean }) {
     clients: '👥',
     progress: '📊',
     profile: '⚙️',
+    marketplace: '🏪',
   };
 
   return (
@@ -101,6 +102,13 @@ export default function TabLayout() {
         options={{
           title: t('tabs.profile'),
           tabBarIcon: ({ focused }) => <TabIcon name="profile" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="marketplace"
+        options={{
+          title: t('tabs.marketplace'),
+          tabBarIcon: ({ focused }) => <TabIcon name="marketplace" focused={focused} />,
         }}
       />
     </Tabs>

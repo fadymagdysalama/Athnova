@@ -66,14 +66,19 @@ All infrastructure runs on **Supabase free tier** — zero cost for development 
 - Coach alerts: new client request, client feedback submitted, client uploaded video
 - Powered by Expo Push Notifications + Supabase pg_cron scheduled jobs
 
-### 🔲 Phase 6 — Marketplace
-- Public programs listed in browse section
-- Program cards show: title, difficulty, duration, preview days
-- One-time purchase flow (Stripe)
-- Purchased programs unlock full content
-- Coach subscription tiers: Starter / Pro / Business
+### ✅ Phase 6 — Marketplace
+- Public programs listed in browse section (Marketplace tab, visible to all users)
+- Program cards show: title, difficulty, duration, creator, price
+- Preview Day 1 exercises — rest of the program locked behind purchase
+- One-time purchase flow (Stripe PaymentIntent via `create-payment-intent` Edge Function)
+- Stripe webhook (`stripe-webhook`) reliably records purchases after payment
+- Purchased programs unlock full content via `program_purchases` table
+- **Admin-only**: only the platform owner can create and publish public marketplace programs
+- **Coaches**: create private programs for their own clients only; cannot publish to marketplace
+- **Clients without a coach**: can browse and purchase marketplace programs independently
+- Full EN + AR i18n coverage for all marketplace strings
 
-### 🔲 Phase 7 — Progress Tracking
+### ✅ Phase 7 — Progress Tracking
 - Body measurements over time: weight, body fat %, muscle mass
 - Progress photos: front / side / back with date comparison
 - Strength logs: exercise, weight, reps, sets, PR detection

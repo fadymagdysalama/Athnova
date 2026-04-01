@@ -145,3 +145,31 @@ export interface StrengthLog {
   is_pr: boolean;
   created_at: string;
 }
+
+// ─── Phase 6: Marketplace ──────────────────────────────────────────────────
+
+export interface ProgramPurchase {
+  id: string;
+  program_id: string;
+  client_id: string;
+  purchased_at: string;
+  // Joined
+  program?: Program;
+}
+
+export type SubscriptionTier = 'starter' | 'pro' | 'business';
+
+export interface CoachSubscription {
+  id: string;
+  coach_id: string;
+  tier: SubscriptionTier;
+  payment_ref: string | null;
+  current_period_end: string | null;
+  created_at: string;
+}
+
+export interface PublicProgram extends Program {
+  creator?: Pick<Profile, 'id' | 'display_name' | 'username'>;
+  preview_days?: ProgramDayWithExercises[];
+  is_purchased?: boolean;
+}

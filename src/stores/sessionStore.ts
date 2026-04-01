@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
+import { sendNotification } from '../lib/sendNotification';
 import type { Session, Profile } from '../types';
 
 export interface SessionWithClients extends Session {
@@ -54,7 +55,7 @@ function zeroPad(n: number): string {
   return String(n).padStart(2, '0');
 }
 
-export const useSessionStore = create<SessionState>((set) => ({
+export const useSessionStore = create<SessionState>((set, get) => ({
   sessions: [],
   availableSessions: [],
   currentSession: null,
@@ -236,12 +237,33 @@ export const useSessionStore = create<SessionState>((set) => ({
 
   // ─── Coach: cancel a session (sets status = 'cancelled') ─────────────────
   cancelSession: async (id) => {
+    // Fetch clients to notify before updating the row
+    const { data: clientRows } = await supabase
+      .from('session_clients')
+      .select('client_id')
+      .eq('session_id', id);
+
     const { error } = await supabase
       .from('sessions')
       .update({ status: 'cancelled' })
       .eq('id', id);
 
     if (error) return { error: error.message };
+
+    // Notify all affected clients
+    const session =
+      get().sessions.find((s) => s.id === id) ?? get().currentSession ?? null;
+    for (const row of clientRows ?? []) {
+      sendNotification({
+        recipient_id: (row as any).client_id,
+        type: 'session_cancelled',
+        title: 'Session Cancelled',
+        body: session
+          ? `Your session on ${session.date} at ${session.start_time} has been cancelled.`
+          : 'Your upcoming session has been cancelled.',
+        data: { session_id: id },
+      });
+    }
 
     set((s) => ({
       sessions: s.sessions.map((sess) =>
@@ -270,6 +292,18 @@ export const useSessionStore = create<SessionState>((set) => ({
     if (error) return { error: error.message };
     // count === 0 means RLS silently blocked the delete (no rows removed)
     if (count === 0) return { error: 'cancel_failed' };
+
+    // Notify coach that client left
+    const leavingSession = get().sessions.find((s) => s.id === sessionId);
+    if (leavingSession) {
+      sendNotification({
+        recipient_id: leavingSession.coach_id,
+        type: 'session_left',
+        title: 'Client Cancelled Booking',
+        body: `A client cancelled their booking for ${leavingSession.date} at ${leavingSession.start_time}.`,
+        data: { session_id: sessionId },
+      });
+    }
 
     const today = new Date();
     const todayStr = `${today.getFullYear()}-${zeroPad(today.getMonth() + 1)}-${zeroPad(today.getDate())}`;
@@ -386,6 +420,8 @@ export const useSessionStore = create<SessionState>((set) => ({
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: 'Not authenticated' };
 
+    const session = get().availableSessions.find((s) => s.id === sessionId);
+
     const { error } = await supabase
       .from('session_clients')
       .insert({ session_id: sessionId, client_id: user.id });
@@ -393,6 +429,17 @@ export const useSessionStore = create<SessionState>((set) => ({
     if (error) {
       if (error.code === '23505') return { error: 'already_booked' };
       return { error: error.message };
+    }
+
+    // Notify the coach
+    if (session) {
+      sendNotification({
+        recipient_id: session.coach_id,
+        type: 'session_booked',
+        title: 'New Booking ✅',
+        body: `A client booked your session on ${session.date} at ${session.start_time}.`,
+        data: { session_id: sessionId },
+      });
     }
 
     // Move the session from availableSessions to sessions

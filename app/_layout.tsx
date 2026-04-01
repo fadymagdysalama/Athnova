@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useAuthStore } from '../src/stores/authStore';
 import { colors } from '../src/constants/theme';
+import { useNotifications } from '../src/hooks/useNotifications';
 import '../src/i18n';
 
 export default function RootLayout() {
@@ -12,6 +13,10 @@ export default function RootLayout() {
   useEffect(() => {
     initialize();
   }, []);
+
+  // Registers push token, subscribes to real-time notifications, and
+  // sets up foreground/tap listeners. Runs only when a session exists.
+  useNotifications();
 
   if (!isInitialized || isLoading) {
     return (

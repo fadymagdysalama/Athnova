@@ -10,7 +10,6 @@ import { useAuthStore } from '../../src/stores/authStore';
 import { useProgramStore } from '../../src/stores/programStore';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 import type { Program } from '../../src/types';
-
 const DIFFICULTY_COLOR: Record<string, string> = {
   beginner: colors.success,
   intermediate: colors.warning,
@@ -103,7 +102,9 @@ function CoachView() {
               <Text style={styles.programDesc} numberOfLines={2}>{p.description}</Text>
             )}
             <View style={styles.programMeta}>
-              <Text style={styles.metaText}>{t('programs.days', { count: p.duration_days })}</Text>
+              <View style={styles.metaLeft}>
+                <Text style={styles.metaText}>{t('programs.days', { count: p.duration_days })}</Text>
+              </View>
               <View style={styles.metaActions}>
                 <TouchableOpacity
                   style={styles.assignBtn}
@@ -325,6 +326,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: spacing.sm,
   },
+  metaLeft: {
+    flexDirection: 'column',
+    gap: spacing.xs,
+  },
+  marketplaceBadge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: borderRadius.full,
+    alignSelf: 'flex-start',
+  },
+  publishedBadge: { backgroundColor: `${colors.success}18` },
+  draftBadge: { backgroundColor: `${colors.textMuted}18` },
+  marketplaceBadgeText: { fontSize: fontSize.xs, fontWeight: '600' },
+  publishedText: { color: colors.success },
+  draftText: { color: colors.textMuted },
   metaText: {
     fontSize: fontSize.sm,
     color: colors.textMuted,

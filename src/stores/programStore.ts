@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
+import { sendNotification } from '../lib/sendNotification';
 import type {
   Program,
   ProgramDay,
@@ -157,6 +158,18 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
       { program_id: programId, client_id: clientId, assigned_by: user.id, current_day: 1 },
       { onConflict: 'program_id,client_id' }
     );
+    if (!error) {
+      const program = get().myPrograms.find((p) => p.id === programId);
+      sendNotification({
+        recipient_id: clientId,
+        type: 'program_assigned',
+        title: 'New Program Assigned 📋',
+        body: program
+          ? `Your coach assigned you "${program.title}"`
+          : 'Your coach assigned you a new program.',
+        data: { program_id: programId },
+      });
+    }
     return { error: error?.message ?? null };
   },
 
