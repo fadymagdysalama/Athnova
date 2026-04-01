@@ -7,20 +7,8 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
 import { useNotificationStore } from '../stores/notificationStore';
 
-// ─── Foreground notification presentation ────────────────────────────────────
-try {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
-  });
-} catch {
-  // Native notifications module unavailable (Expo Go / web)
-}
+// Note: setNotificationHandler and Android channel are configured in index.ts
+// at the earliest possible point before any React component mounts.
 
 // ─── Permission + token registration ─────────────────────────────────────────
 async function registerForPushNotificationsAsync(): Promise<string | null> {
@@ -30,7 +18,13 @@ async function registerForPushNotificationsAsync(): Promise<string | null> {
   let finalStatus = existingStatus;
 
   if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
+    const { status } = await Notifications.requestPermissionsAsync({
+      ios: {
+        allowAlert: true,
+        allowBadge: true,
+        allowSound: true,
+      },
+    });
     finalStatus = status;
   }
 

@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Alert, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useProgramStore } from '../../src/stores/programStore';
@@ -34,7 +34,7 @@ function CoachView() {
   const [refreshing, setRefreshing] = useState(false);
   const [duplicating, setDuplicating] = useState<string | null>(null);
 
-  useEffect(() => { fetchMyPrograms(); }, []);
+  useFocusEffect(useCallback(() => { fetchMyPrograms(); }, [fetchMyPrograms]));
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -140,7 +140,7 @@ function ClientView() {
   const { assignments, isLoading, fetchAssignedPrograms } = useProgramStore();
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => { fetchAssignedPrograms(); }, []);
+  useFocusEffect(useCallback(() => { fetchAssignedPrograms(); }, [fetchAssignedPrograms]));
 
   const onRefresh = async () => {
     setRefreshing(true);

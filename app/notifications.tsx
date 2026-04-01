@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -84,6 +84,8 @@ function NotificationRow({
 export default function NotificationsScreen() {
   const { notifications, unreadCount, isLoading, fetchNotifications, markAsRead, markAllAsRead } =
     useNotificationStore();
+
+  useEffect(() => { fetchNotifications(); }, []);
 
   const handlePress = useCallback(
     (item: Notification) => {

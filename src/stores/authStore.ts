@@ -41,15 +41,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
 
       // Listen for auth changes
-      supabase.auth.onAuthStateChange(async (_event, session) => {
+      supabase.auth.onAuthStateChange((_event, session) => {
         set({ session });
+
         if (session?.user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
-          set({ profile });
+          // Avoid awaiting Supabase calls inside the auth callback.
+          // Supabase Auth can hold an internal lock during this event.
+          setTimeout(async () => {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', session.user.id)
+              .single();
+
+            set({ profile });
+          }, 0);
         } else {
           set({ profile: null });
         }
@@ -95,7 +101,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signIn: async (username: string, password: string) => {
     const fakeEmail = `${username.toLowerCase()}@coachera.app`;
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data: signInData, error } = await supabase.auth.signInWithPassword({
       email: fakeEmail,
       password,
     });
@@ -103,6 +109,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (error) {
       // Show real error in dev so we can diagnose
       return { error: error.message };
+    }
+
+    set({ session: signInData.session, pendingUsername: '', profile: null });
+
+    if (signInData.session?.user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', signInData.session.user.id)
+        .maybeSingle();
+
+      set({ profile: profile ?? null });
     }
 
     return { error: null };

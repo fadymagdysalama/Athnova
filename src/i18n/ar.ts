@@ -82,6 +82,9 @@ export default {
     shareCodeHint: 'شارك اسم مستخدمك حتى يتمكن العملاء من العثور عليك',
     viewProfile: 'عرض الملف الشخصي',
     clientSince: 'عميل منذ {{date}}',
+    cancelRequest: 'إلغاء الطلب',
+    awaitingResponse: 'في انتظار الرد...',
+    coach: 'مدرب',
   },
   programs: {
     title: 'البرامج',

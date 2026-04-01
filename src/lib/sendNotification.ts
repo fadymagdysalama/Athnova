@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { invokeEdgeFunction } from './invokeEdgeFunction';
 
 export interface NotificationPayload {
   recipient_id: string;
@@ -16,23 +16,13 @@ export interface NotificationPayload {
  */
 export async function sendNotification(payload: NotificationPayload): Promise<void> {
   try {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const accessToken = sessionData.session?.access_token;
-
-    if (!accessToken) {
-      console.error('sendNotification skipped: no active access token');
-      return;
-    }
-
-    const { error } = await supabase.functions.invoke('send-push', {
-      body: payload,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
+    const { data, error, status, responseText } = await invokeEdgeFunction<{
+      success?: boolean;
+      push?: boolean;
+    }>('send-push', payload);
 
     if (error) {
-      console.error('send-push invoke failed:', error.message);
+      console.error('send-push invoke failed:', status, responseText || error);
     }
   } catch (error) {
     console.error('sendNotification failed:', error);

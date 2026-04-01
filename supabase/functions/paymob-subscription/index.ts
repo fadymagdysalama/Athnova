@@ -16,7 +16,7 @@ const TIER_PRICES_CENTS: Record<string, number> = {
   business: 49900,  // 499 EGP
 };
 
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
       headers: {
@@ -39,6 +39,8 @@ Deno.serve(async (req) => {
     },
   });
 
+  const userResponseText = await userRes.text();
+
   if (!userRes.ok) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
@@ -46,7 +48,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  const userData = await userRes.json();
+  const userData = JSON.parse(userResponseText || '{}');
   const userId: string = userData.id;
   if (!userId) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -86,7 +88,8 @@ Deno.serve(async (req) => {
       },
     },
   );
-  const profiles = await profileRes.json();
+  const profileResponseText = await profileRes.text();
+  const profiles = JSON.parse(profileResponseText || '[]');
   const profile = profiles?.[0] ?? {};
   const displayName: string = profile.display_name ?? profile.username ?? 'Coach';
 
@@ -101,6 +104,8 @@ Deno.serve(async (req) => {
     body: JSON.stringify({ api_key: paymobApiKey }),
   });
 
+  const authResponseText = await authRes.text();
+
   if (!authRes.ok) {
     return new Response(JSON.stringify({ error: 'Paymob auth failed' }), {
       status: 502,
@@ -108,7 +113,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  const { token: authToken } = await authRes.json();
+  const { token: authToken } = JSON.parse(authResponseText || '{}');
 
   // ─── Step 2: Create an order ──────────────────────────────────────────────
   const orderRes = await fetch('https://accept.paymob.com/api/ecommerce/orders', {
@@ -131,6 +136,8 @@ Deno.serve(async (req) => {
     }),
   });
 
+  const orderResponseText = await orderRes.text();
+
   if (!orderRes.ok) {
     return new Response(JSON.stringify({ error: 'Failed to create Paymob order' }), {
       status: 502,
@@ -138,7 +145,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  const orderData = await orderRes.json();
+  const orderData = JSON.parse(orderResponseText || '{}');
   const paymobOrderId: number = orderData.id;
 
   // ─── Step 3: Generate a payment key ───────────────────────────────────────
@@ -170,6 +177,8 @@ Deno.serve(async (req) => {
     }),
   });
 
+  const paymentKeyResponseText = await pkRes.text();
+
   if (!pkRes.ok) {
     return new Response(JSON.stringify({ error: 'Failed to generate payment key' }), {
       status: 502,
@@ -177,8 +186,9 @@ Deno.serve(async (req) => {
     });
   }
 
-  const { token: paymentKey } = await pkRes.json();
-  const paymentUrl = `https://accept.paymob.com/api/acceptance/iframes/${iframeId}?payment_token=${paymentKey}`;
+  const { token: paymentKey } = JSON.parse(paymentKeyResponseText || '{}');
+  // Append redirect_url as a query param so Paymob redirects back to the app after payment
+  const paymentUrl = `https://accept.paymob.com/api/acceptance/iframes/${iframeId}?payment_token=${paymentKey}&redirect_url=${encodeURIComponent('coachera://')}`;
 
   return new Response(JSON.stringify({ paymentUrl }), {
     headers: {

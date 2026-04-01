@@ -82,6 +82,9 @@ export default {
     shareCodeHint: 'Share your username so clients can find you',
     viewProfile: 'View Profile',
     clientSince: 'Client since {{date}}',
+    cancelRequest: 'Cancel Request',
+    awaitingResponse: 'Awaiting response...',
+    coach: 'Coach',
   },
   programs: {
     title: 'Programs',

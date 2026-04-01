@@ -180,11 +180,11 @@ export const useProgressStore = create<ProgressState>((set, get) => ({
     const filename = `${user.id}/${date}_${label}_${Date.now()}.jpg`;
 
     const response = await fetch(uri);
-    const blob = await response.blob();
+    const arrayBuffer = await response.arrayBuffer();
 
     const { error: uploadError } = await supabase.storage
       .from('progress-photos')
-      .upload(filename, blob, { contentType: 'image/jpeg', upsert: false });
+      .upload(filename, arrayBuffer, { contentType: 'image/jpeg', upsert: false });
 
     if (uploadError) return { error: uploadError.message };
 

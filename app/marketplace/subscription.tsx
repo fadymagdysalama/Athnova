@@ -8,8 +8,8 @@ import {
   Alert,
   ActivityIndicator,
   AppState,
-  Linking,
 } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -108,28 +108,28 @@ export default function SubscriptionScreen() {
         {
           text: tier > currentTier ? t('subscription.upgrade') : t('subscription.downgrade'),
           onPress: async () => {
-            setUpgrading(tier);
-            const result = await upgradeSubscription(tier);
-            setUpgrading(null);
+            try {
+              setUpgrading(tier);
+              const result = await upgradeSubscription(tier);
 
-            if (result.error) {
-              Alert.alert(t('common.error'), result.error);
-            } else if (result.paymentUrl) {
-              // Paid tier — open Paymob in browser
-              awaitingPayment.current = true;
-              Alert.alert(
-                t('paymentRedirect'),
-                t('paymentRedirectHint'),
-                [
-                  {
-                    text: t('common.ok'),
-                    onPress: () => Linking.openURL(result.paymentUrl!),
-                  },
-                ],
-              );
-            } else {
-              // Free tier (starter) — immediate
-              Alert.alert(t('subscription.upgradeSuccess'));
+              if (result.error) {
+                Alert.alert(t('common.error'), result.error);
+              } else if (result.paymentUrl) {
+                // Paid tier — open Paymob in Safari View Controller.
+                // openAuthSessionAsync automatically closes and returns to the app
+                // when Paymob redirects to the coachera:// scheme.
+                awaitingPayment.current = true;
+                await WebBrowser.openAuthSessionAsync(result.paymentUrl, 'coachera://');
+                awaitingPayment.current = false;
+                fetchCoachSubscription();
+              } else {
+                // Free tier (starter) — immediate
+                Alert.alert(t('subscription.upgradeSuccess'));
+              }
+            } catch (error) {
+              Alert.alert(t('common.error'), error instanceof Error ? error.message : String(error));
+            } finally {
+              setUpgrading(null);
             }
           },
         },

@@ -10,7 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useSessionStore } from '../../src/stores/sessionStore';
@@ -191,9 +191,11 @@ export default function ScheduleScreen() {
     [profile?.role, fetchSessions],
   );
 
-  useEffect(() => {
-    load(viewYear, viewMonth);
-  }, [viewYear, viewMonth, load]);
+  useFocusEffect(
+    useCallback(() => {
+      load(viewYear, viewMonth);
+    }, [load, viewYear, viewMonth])
+  );
 
   // Clients: load their coach and available sessions
   useEffect(() => {

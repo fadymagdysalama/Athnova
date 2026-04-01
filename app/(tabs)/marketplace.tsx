@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useMarketplaceStore } from '../../src/stores/marketplaceStore';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
@@ -97,7 +97,22 @@ function ClientMarketplaceView() {
   const [refreshing, setRefreshing] = useState(false);
   const [purchasing, setPurchasing] = useState<string | null>(null);
 
+  // Keep a ref so the stable useFocusEffect callback always sees the current filter
+  const filterRef = useRef<Filter>('all');
+  filterRef.current = filter;
+
+  // Tab-focus refresh (stable callback, reads filter from ref)
+  useFocusEffect(
+    useCallback(() => {
+      fetchPublicPrograms(filterRef.current);
+      fetchMyPurchases();
+    }, [])
+  );
+
+  // Filter-change fetch — skip the very first render (handled by useFocusEffect above)
+  const isFirstFocus = useRef(true);
   useEffect(() => {
+    if (isFirstFocus.current) { isFirstFocus.current = false; return; }
     fetchPublicPrograms(filter);
     fetchMyPurchases();
   }, [filter]);
@@ -131,20 +146,25 @@ function ClientMarketplaceView() {
       {
         text: isFree ? t('marketplace.getFree') : t('marketplace.buy', { price: program.price!.toFixed(2) }),
         onPress: async () => {
-          setPurchasing(program.id);
-          const { error } = await purchaseProgram(program.id);
-          setPurchasing(null);
-          if (error) {
-            Alert.alert(t('common.error'), error);
-          } else {
-            Alert.alert(t('marketplace.purchaseSuccess'), t('marketplace.purchaseSuccessHint'));
+          try {
+            setPurchasing(program.id);
+            const { error } = await purchaseProgram(program.id);
+            if (error) {
+              Alert.alert(t('common.error'), error);
+            } else {
+              Alert.alert(t('marketplace.purchaseSuccess'), t('marketplace.purchaseSuccessHint'));
+            }
+          } catch (error) {
+            Alert.alert(t('common.error'), error instanceof Error ? error.message : String(error));
+          } finally {
+            setPurchasing(null);
           }
         },
       },
     ]);
   };
 
-  if (isLoading && !refreshing) {
+  if (isLoading && publicPrograms.length === 0 && !refreshing) {
     return <View style={styles.centered}><ActivityIndicator size="large" color={colors.primary} /></View>;
   }
 

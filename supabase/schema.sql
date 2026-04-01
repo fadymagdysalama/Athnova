@@ -292,6 +292,11 @@ CREATE POLICY "Clients can create requests" ON coach_client_requests
   FOR INSERT WITH CHECK (auth.uid() = client_id);
 CREATE POLICY "Coaches can update request status" ON coach_client_requests
   FOR UPDATE USING (auth.uid() = coach_id);
+-- Allow clients to re-send a request after being removed (rejected) by a coach
+CREATE POLICY "Clients can resend rejected requests" ON coach_client_requests
+  FOR UPDATE
+  USING (auth.uid() = client_id AND status = 'rejected')
+  WITH CHECK (auth.uid() = client_id AND status = 'pending');
 
 -- PROGRAMS: Creators see their own, everyone sees published public programs, assigned clients see their assigned
 CREATE POLICY "Creators can manage own programs" ON programs

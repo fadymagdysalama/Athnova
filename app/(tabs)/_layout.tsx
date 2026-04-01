@@ -102,6 +102,7 @@ export default function TabLayout() {
         options={{
           title: t('tabs.marketplace'),
           tabBarIcon: ({ focused }) => <TabIcon name="marketplace" focused={focused} />,
+          href: isCoach ? null : undefined, // Hidden for coaches, visible for clients
         }}
       />
       <Tabs.Screen

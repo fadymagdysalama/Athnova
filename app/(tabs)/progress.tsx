@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useProgressStore } from '../../src/stores/progressStore';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
@@ -55,7 +55,7 @@ function MeasurementsSection() {
   const router = useRouter();
   const { measurements, fetchMeasurements, deleteMeasurement, isLoading } = useProgressStore();
 
-  useEffect(() => { fetchMeasurements(); }, []);
+  useFocusEffect(useCallback(() => { fetchMeasurements(); }, [fetchMeasurements]));
 
   const latest = measurements[0] ?? null;
   const weights = measurements
@@ -172,7 +172,7 @@ function StrengthSection() {
   const { strengthLogs, fetchStrengthLogs, deleteStrengthLog, isLoading } = useProgressStore();
   const [selectedExercise, setSelectedExercise] = useState<string | null>(null);
 
-  useEffect(() => { fetchStrengthLogs(); }, []);
+  useFocusEffect(useCallback(() => { fetchStrengthLogs(); }, [fetchStrengthLogs]));
 
   const exercises = Array.from(new Set(strengthLogs.map((l) => l.exercise_name)));
   const activeExercise = selectedExercise ?? exercises[0] ?? null;
@@ -310,7 +310,7 @@ function PhotosSection() {
   const router = useRouter();
   const { photos, fetchPhotos, deletePhoto, isLoading } = useProgressStore();
 
-  useEffect(() => { fetchPhotos(); }, []);
+  useFocusEffect(useCallback(() => { fetchPhotos(); }, [fetchPhotos]));
 
   const labelKey = (label: string) =>
     `progress.label${label.charAt(0).toUpperCase()}${label.slice(1)}` as any;

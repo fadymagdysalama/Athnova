@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -10,10 +10,11 @@ import {
   RefreshControl,
   TextInput,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useConnectionStore } from '../../src/stores/connectionStore';
+import { supabase } from '../../src/lib/supabase';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 
 function Avatar({ name, size = 44 }: { name: string; size?: number }) {
@@ -31,8 +32,26 @@ function CoachView() {
   const { pendingRequests, clients, isLoading, fetchCoachData, acceptRequest, rejectRequest, removeClient } = useConnectionStore();
   const { profile } = useAuthStore();
   const [refreshing, setRefreshing] = useState(false);
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
-  useEffect(() => { fetchCoachData(); }, []);
+  // Refresh data every time the tab comes into focus
+  useFocusEffect(
+    useCallback(() => { fetchCoachData(); }, [])
+  );
+
+  // Real-time: silent refresh (no spinner) on any row change
+  useEffect(() => {
+    if (!profile?.id) return;
+    const channel = supabase
+      .channel(`coach-client-requests:coach:${profile.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'coach_client_requests', filter: `coach_id=eq.${profile.id}` },
+        () => { fetchCoachData(true); }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [profile?.id]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -41,21 +60,42 @@ function CoachView() {
   };
 
   const handleAccept = async (id: string) => {
+    if (acceptingId) return;
+    setAcceptingId(id);
     const { error } = await acceptRequest(id);
+    setAcceptingId(null);
     if (error) Alert.alert(t('common.error'), error);
   };
 
   const handleReject = async (id: string, name: string) => {
+    if (rejectingId) return;
     Alert.alert(t('connections.reject'), name, [
       { text: t('common.cancel'), style: 'cancel' },
-      { text: t('connections.reject'), style: 'destructive', onPress: async () => { const { error } = await rejectRequest(id); if (error) Alert.alert(t('common.error'), error); } },
+      {
+        text: t('connections.reject'), style: 'destructive',
+        onPress: async () => {
+          setRejectingId(id);
+          const { error } = await rejectRequest(id);
+          setRejectingId(null);
+          if (error) Alert.alert(t('common.error'), error);
+        },
+      },
     ]);
   };
 
   const handleRemove = async (id: string, name: string) => {
+    if (removingId) return;
     Alert.alert(t('connections.removeClient'), name, [
       { text: t('common.cancel'), style: 'cancel' },
-      { text: t('connections.removeClient'), style: 'destructive', onPress: async () => { const { error } = await removeClient(id); if (error) Alert.alert(t('common.error'), error); } },
+      {
+        text: t('connections.removeClient'), style: 'destructive',
+        onPress: async () => {
+          setRemovingId(id);
+          const { error } = await removeClient(id);
+          setRemovingId(null);
+          if (error) Alert.alert(t('common.error'), error);
+        },
+      },
     ]);
   };
 
@@ -83,11 +123,23 @@ function CoachView() {
                 <Text style={styles.cardName}>{p.display_name}</Text>
                 <Text style={styles.cardUsername}>@{p.username}</Text>
               </View>
-              <TouchableOpacity style={[styles.actionBtn, styles.acceptBtn]} onPress={() => handleAccept(request.id)}>
-                <Text style={styles.acceptBtnText}>{t('connections.accept')}</Text>
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.acceptBtn, (acceptingId === request.id || rejectingId === request.id) && styles.btnDisabled]}
+                onPress={() => handleAccept(request.id)}
+                disabled={!!acceptingId || !!rejectingId}
+              >
+                {acceptingId === request.id
+                  ? <ActivityIndicator size="small" color={colors.textInverse} />
+                  : <Text style={styles.acceptBtnText}>{t('connections.accept')}</Text>}
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn]} onPress={() => handleReject(request.id, p.display_name)}>
-                <Text style={styles.rejectBtnText}>{t('connections.reject')}</Text>
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.rejectBtn, (acceptingId === request.id || rejectingId === request.id) && styles.btnDisabled]}
+                onPress={() => handleReject(request.id, p.display_name)}
+                disabled={!!acceptingId || !!rejectingId}
+              >
+                {rejectingId === request.id
+                  ? <ActivityIndicator size="small" color={colors.error} />
+                  : <Text style={styles.rejectBtnText}>{t('connections.reject')}</Text>}
               </TouchableOpacity>
             </View>
           ))}
@@ -108,8 +160,14 @@ function CoachView() {
                 <Text style={styles.cardName}>{p.display_name}</Text>
                 <Text style={styles.cardUsername}>@{p.username}</Text>
               </View>
-              <TouchableOpacity style={[styles.actionBtn, styles.removeBtn]} onPress={() => handleRemove(request.id, p.display_name)}>
-                <Text style={styles.removeBtnText}>{t('connections.removeClient')}</Text>
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.removeBtn, removingId === request.id && styles.btnDisabled]}
+                onPress={() => handleRemove(request.id, p.display_name)}
+                disabled={!!removingId}
+              >
+                {removingId === request.id
+                  ? <ActivityIndicator size="small" color={colors.textMuted} />
+                  : <Text style={styles.removeBtnText}>{t('connections.removeClient')}</Text>}
               </TouchableOpacity>
             </TouchableOpacity>
           ))
@@ -122,11 +180,29 @@ function CoachView() {
 function ClientView() {
   const { t } = useTranslation();
   const { myCoach, myRequest, isLoading, fetchClientData, sendRequest, cancelRequest, disconnectFromCoach } = useConnectionStore();
+  const { profile } = useAuthStore();
   const [coachUsername, setCoachUsername] = useState('');
   const [sending, setSending] = useState(false);
+  const [canceling, setCanceling] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => { fetchClientData(); }, []);
+  // Refresh data every time the tab comes into focus
+  useFocusEffect(
+    useCallback(() => { fetchClientData(); }, [])
+  );
+
+  // Real-time: silent refresh (no spinner) on any row change
+  useEffect(() => {
+    if (!profile?.id) return;
+    const channel = supabase
+      .channel(`coach-client-requests:client:${profile.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'coach_client_requests', filter: `client_id=eq.${profile.id}` },
+        () => { fetchClientData(true); }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [profile?.id]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -144,19 +220,43 @@ function ClientView() {
     else setCoachUsername('');
   };
 
-  const handleCancel = async () => {
-    Alert.alert(t('common.cancel'), '', [
-      { text: t('common.back'), style: 'cancel' },
-      { text: t('common.confirm'), style: 'destructive', onPress: async () => { const { error } = await cancelRequest(); if (error) Alert.alert(t('common.error'), error); } },
-    ]);
+  const handleCancel = () => {
+    const pendingCoach = myRequest?.coach;
+    Alert.alert(
+      t('connections.cancelRequest'),
+      pendingCoach ? `@${pendingCoach.username}` : '',
+      [
+        { text: t('common.back'), style: 'cancel' },
+        {
+          text: t('connections.cancelRequest'), style: 'destructive',
+          onPress: async () => {
+            setCanceling(true);
+            const { error } = await cancelRequest();
+            setCanceling(false);
+            if (error) Alert.alert(t('common.error'), error);
+          },
+        },
+      ],
+    );
   };
 
   const handleDisconnect = async () => {
     Alert.alert(t('connections.disconnect'), myCoach?.display_name ?? '', [
       { text: t('common.cancel'), style: 'cancel' },
-      { text: t('connections.disconnect'), style: 'destructive', onPress: async () => { const { error } = await disconnectFromCoach(); if (error) Alert.alert(t('common.error'), error); } },
+      {
+        text: t('connections.disconnect'), style: 'destructive',
+        onPress: async () => {
+          setDisconnecting(true);
+          const { error } = await disconnectFromCoach();
+          setDisconnecting(false);
+          if (error) Alert.alert(t('common.error'), error);
+        },
+      },
     ]);
   };
+
+  // The request row always includes the joined coach profile
+  const pendingCoach = myRequest?.coach;
 
   if (isLoading && !refreshing) {
     return <View style={styles.centered}><ActivityIndicator size="large" color={colors.primary} /></View>;
@@ -165,6 +265,8 @@ function ClientView() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}>
+
+      {/* ── Connected to a coach ── */}
       {myCoach && myRequest?.status === 'accepted' && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('connections.myCoach')}</Text>
@@ -177,25 +279,46 @@ function ClientView() {
                 <Text style={styles.connectedText}>{t('connections.connected')}</Text>
               </View>
             </View>
-            <TouchableOpacity style={[styles.actionBtn, styles.removeBtn]} onPress={handleDisconnect}>
-              <Text style={styles.removeBtnText}>{t('connections.disconnect')}</Text>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.removeBtn, disconnecting && styles.btnDisabled]}
+              onPress={handleDisconnect}
+              disabled={disconnecting}
+            >
+              {disconnecting
+                ? <ActivityIndicator size="small" color={colors.textMuted} />
+                : <Text style={styles.removeBtnText}>{t('connections.disconnect')}</Text>}
             </TouchableOpacity>
           </View>
         </View>
       )}
 
+      {/* ── Pending request (shows coach info) ── */}
       {myRequest?.status === 'pending' && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('connections.pendingRequests')}</Text>
           <View style={styles.pendingCard}>
-            <Text style={styles.pendingText}>{t('connections.requestPending')}</Text>
-            <TouchableOpacity style={[styles.actionBtn, styles.removeBtn]} onPress={handleCancel}>
-              <Text style={styles.removeBtnText}>{t('common.cancel')}</Text>
+            {pendingCoach && <Avatar name={pendingCoach.display_name} />}
+            <View style={styles.cardInfo}>
+              <Text style={styles.cardName}>{pendingCoach?.display_name ?? t('connections.coach')}</Text>
+              <Text style={styles.cardUsername}>@{pendingCoach?.username}</Text>
+              <View style={styles.pendingBadge}>
+                <Text style={styles.pendingBadgeText}>{t('connections.awaitingResponse')}</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.rejectBtn, canceling && styles.btnDisabled]}
+              onPress={handleCancel}
+              disabled={canceling}
+            >
+              {canceling
+                ? <ActivityIndicator size="small" color={colors.error} />
+                : <Text style={styles.rejectBtnText}>{t('common.cancel')}</Text>}
             </TouchableOpacity>
           </View>
         </View>
       )}
 
+      {/* ── No coach yet ── */}
       {!myCoach && !myRequest && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('connections.connectCoach')}</Text>
@@ -268,8 +391,11 @@ const styles = StyleSheet.create({
   requestCard: { backgroundColor: colors.card, borderRadius: borderRadius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderWidth: 1, borderColor: colors.border },
   clientCard: { backgroundColor: colors.card, borderRadius: borderRadius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderWidth: 1, borderColor: colors.border },
   coachCard: { backgroundColor: colors.card, borderRadius: borderRadius.md, padding: spacing.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderWidth: 1, borderColor: colors.border },
-  pendingCard: { backgroundColor: colors.card, borderRadius: borderRadius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.borderLight },
+  pendingCard: { backgroundColor: colors.card, borderRadius: borderRadius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderWidth: 1, borderColor: `${colors.warning}40` },
+  pendingBadge: { alignSelf: 'flex-start', backgroundColor: `${colors.warning}18`, borderRadius: borderRadius.full, paddingHorizontal: spacing.sm, paddingVertical: 2, marginTop: 2 },
+  pendingBadgeText: { fontSize: fontSize.xs, fontWeight: '600', color: colors.warning },
   pendingText: { fontSize: fontSize.sm, color: colors.warning, fontWeight: '600' },
+  btnDisabled: { opacity: 0.4 },
   emptyCard: { backgroundColor: colors.card, borderRadius: borderRadius.md, padding: spacing['2xl'], alignItems: 'center', borderWidth: 1, borderColor: colors.borderLight },
   emptyText: { fontSize: fontSize.sm, color: colors.textMuted },
   cardInfo: { flex: 1, gap: 2 },

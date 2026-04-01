@@ -26,12 +26,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
+    const authHeader = req.headers.get('Authorization') ?? '';
     const { programId, userId } = await req.json();
 
     if (!programId || !userId) {
@@ -42,17 +43,44 @@ Deno.serve(async (req) => {
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const paymobApiKey = Deno.env.get('PAYMOB_API_KEY')!;
     const integrationId = Deno.env.get('PAYMOB_INTEGRATION_ID')!;
     const iframeId = Deno.env.get('PAYMOB_IFRAME_ID')!;
+
+    const userRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: {
+        apikey: supabaseAnonKey,
+        Authorization: authHeader,
+      },
+    });
+    const userResponseText = await userRes.text();
+
+    if (!userRes.ok) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const userData = JSON.parse(userResponseText || '{}');
+    const authenticatedUserId = userData.id as string | undefined;
+
+    if (!authenticatedUserId || authenticatedUserId !== userId) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // Validate program exists and has a paid price
     const programRes = await fetch(
       `${supabaseUrl}/rest/v1/programs?id=eq.${programId}&select=price,title`,
       { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } },
     );
-    const [program] = await programRes.json();
+    const programResponseText = await programRes.text();
+    const [program] = JSON.parse(programResponseText || '[]');
 
     if (!program) {
       return new Response(JSON.stringify({ error: 'Program not found' }), {
@@ -72,7 +100,8 @@ Deno.serve(async (req) => {
       `${supabaseUrl}/rest/v1/program_purchases?program_id=eq.${programId}&client_id=eq.${userId}`,
       { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } },
     );
-    const existing = await purchaseRes.json();
+    const purchaseResponseText = await purchaseRes.text();
+    const existing = JSON.parse(purchaseResponseText || '[]');
     if (existing.length > 0) {
       return new Response(JSON.stringify({ error: 'Already purchased' }), {
         status: 409,
@@ -89,7 +118,8 @@ Deno.serve(async (req) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ api_key: paymobApiKey }),
     });
-    const { token: authToken } = await authRes.json();
+    const authResponseText = await authRes.text();
+    const { token: authToken } = JSON.parse(authResponseText || '{}');
     if (!authToken) {
       return new Response(JSON.stringify({ error: 'Paymob authentication failed' }), {
         status: 500,
@@ -119,7 +149,8 @@ Deno.serve(async (req) => {
         ],
       }),
     });
-    const { id: orderId } = await orderRes.json();
+    const orderResponseText = await orderRes.text();
+    const { id: orderId } = JSON.parse(orderResponseText || '{}');
     if (!orderId) {
       return new Response(JSON.stringify({ error: 'Paymob order creation failed' }), {
         status: 500,
@@ -156,7 +187,8 @@ Deno.serve(async (req) => {
         lock_order_when_paid: false,
       }),
     });
-    const { token: paymentKey } = await pkRes.json();
+    const paymentKeyResponseText = await pkRes.text();
+    const { token: paymentKey } = JSON.parse(paymentKeyResponseText || '{}');
     if (!paymentKey) {
       return new Response(JSON.stringify({ error: 'Paymob payment key creation failed' }), {
         status: 500,
@@ -164,14 +196,15 @@ Deno.serve(async (req) => {
       });
     }
 
-    const paymentUrl = `https://accept.paymob.com/api/acceptance/iframes/${iframeId}?payment_token=${paymentKey}`;
+    // Append redirect_url as a query param so Paymob redirects back to the app after payment
+    const paymentUrl = `https://accept.paymob.com/api/acceptance/iframes/${iframeId}?payment_token=${paymentKey}&redirect_url=${encodeURIComponent('coachera://')}`;
 
     return new Response(
       JSON.stringify({ paymentUrl }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   } catch (err) {
-    console.error('create-paymob-order error:', err);
+    console.error('[create-paymob-order] unhandled error:', err);
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -1,0 +1,11 @@
+[functions.send-push]
+verify_jwt = false
+
+[functions.create-paymob-order]
+verify_jwt = false
+
+[functions.paymob-subscription]
+verify_jwt = false
+
+[functions.paymob-webhook]
+verify_jwt = false

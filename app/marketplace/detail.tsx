@@ -8,8 +8,8 @@ import {
   ActivityIndicator,
   Alert,
   AppState,
-  Linking,
 } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -88,31 +88,34 @@ export default function MarketplaceDetailScreen() {
       {
         text: isFree ? t('marketplace.getFree') : t('marketplace.buy', { price: program.price!.toFixed(2) }),
         onPress: async () => {
-          setPurchasing(true);
-          const { error, paymentUrl } = await purchaseProgram(program.id);
-          setPurchasing(false);
-          if (error) {
-            Alert.alert(t('common.error'), error);
-          } else if (paymentUrl) {
-            // Paid program: open Paymob in browser
-            Linking.openURL(paymentUrl);
-            Alert.alert(
-              t('marketplace.paymentRedirect'),
-              t('marketplace.paymentRedirectHint'),
-            );
-          } else {
-            // Free program acquired
-            Alert.alert(
-              t('marketplace.purchaseSuccess'),
-              t('marketplace.purchaseSuccessHint'),
-              [
-                {
-                  text: t('marketplace.viewProgram'),
-                  onPress: () =>
-                    router.replace({ pathname: '/programs/detail', params: { id: program.id, marketplace: '1' } }),
-                },
-              ],
-            );
+          try {
+            setPurchasing(true);
+            const { error, paymentUrl } = await purchaseProgram(program.id);
+
+            if (error) {
+              Alert.alert(t('common.error'), error);
+            } else if (paymentUrl) {
+              // Open Paymob in Safari View Controller; auto-closes when Paymob redirects to coachera://
+              await WebBrowser.openAuthSessionAsync(paymentUrl, 'coachera://');
+              fetchMyPurchases();
+            } else {
+              // Free program acquired
+              Alert.alert(
+                t('marketplace.purchaseSuccess'),
+                t('marketplace.purchaseSuccessHint'),
+                [
+                  {
+                    text: t('marketplace.viewProgram'),
+                    onPress: () =>
+                      router.replace({ pathname: '/programs/detail', params: { id: program.id, marketplace: '1' } }),
+                  },
+                ],
+              );
+            }
+          } catch (error) {
+            Alert.alert(t('common.error'), error instanceof Error ? error.message : String(error));
+          } finally {
+            setPurchasing(false);
           }
         },
       },

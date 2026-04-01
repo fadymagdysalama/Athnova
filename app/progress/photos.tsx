@@ -8,6 +8,9 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  Modal,
+  StatusBar,
+  Dimensions,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
@@ -32,6 +35,7 @@ export default function PhotosScreen() {
 
   const [uploading, setUploading] = useState(false);
   const [selectedLabel, setSelectedLabel] = useState<Label>('front');
+  const [fullscreenPhoto, setFullscreenPhoto] = useState<{ url: string; label: string; date: string } | null>(null);
 
   useEffect(() => { fetchPhotos(); }, []);
 
@@ -51,8 +55,7 @@ export default function PhotosScreen() {
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
+      allowsEditing: false,
       quality: 0.8,
     });
 
@@ -88,6 +91,35 @@ export default function PhotosScreen() {
 
   return (
     <View style={styles.root}>
+      {/* Fullscreen photo viewer */}
+      <Modal
+        visible={fullscreenPhoto !== null}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setFullscreenPhoto(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <StatusBar hidden />
+          <TouchableOpacity style={styles.modalClose} onPress={() => setFullscreenPhoto(null)}>
+            <Text style={styles.modalCloseText}>✕</Text>
+          </TouchableOpacity>
+          {fullscreenPhoto && (
+            <>
+              <Image
+                source={{ uri: fullscreenPhoto.url }}
+                style={styles.fullscreenImage}
+                resizeMode="contain"
+              />
+              <View style={styles.modalMeta}>
+                <Text style={styles.modalLabel}>{t(labelKey(fullscreenPhoto.label))}</Text>
+                <Text style={styles.modalDate}>{fullscreenPhoto.date}</Text>
+              </View>
+            </>
+          )}
+        </View>
+      </Modal>
+
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
@@ -149,6 +181,7 @@ export default function PhotosScreen() {
                 <TouchableOpacity
                   key={p.id}
                   style={styles.photoCard}
+                  onPress={() => setFullscreenPhoto({ url: p.photo_url, label: p.label, date: p.date })}
                   onLongPress={() => handleDelete(p.id, p.photo_url)}
                   activeOpacity={0.85}
                 >
@@ -235,4 +268,46 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
   },
   photoDate: { fontSize: fontSize.xs, color: colors.textMuted },
+
+  // Fullscreen modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalClose: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCloseText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  fullscreenImage: {
+    width: Dimensions.get('window').width,
+    height: Dimensions.get('window').height * 0.8,
+  },
+  modalMeta: {
+    position: 'absolute',
+    bottom: 40,
+    alignItems: 'center',
+    gap: 4,
+  },
+  modalLabel: {
+    color: '#fff',
+    fontSize: fontSize.sm,
+    fontWeight: '700',
+    textTransform: 'capitalize',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+    borderRadius: borderRadius.full,
+  },
+  modalDate: { color: 'rgba(255,255,255,0.7)', fontSize: fontSize.xs },
 });

@@ -73,7 +73,7 @@ async function verifyHmac(
   return computed === receivedHmac;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
   // Paymob sends the HMAC as a query parameter on the webhook URL
   const url = new URL(req.url);
   const hmacReceived = url.searchParams.get('hmac');
@@ -97,7 +97,7 @@ Deno.serve(async (req) => {
 
   const isValid = await verifyHmac(transaction, hmacReceived, hmacSecret);
   if (!isValid) {
-    console.error('HMAC verification failed');
+    console.error('[paymob-webhook] hmac verification failed');
     return new Response('Invalid HMAC', { status: 401 });
   }
 
@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
     // ─── Subscription payment ─────────────────────────────────────────────
     const [, tier, coachId] = parts;
     if (!tier || !coachId) {
-      console.error('Cannot extract tier/coachId from sub merchant_order_id:', merchantOrderId);
+      console.error('[paymob-webhook] invalid subscription merchant_order_id:', merchantOrderId);
       return new Response('Invalid merchant_order_id', { status: 400 });
     }
 
@@ -139,12 +139,14 @@ Deno.serve(async (req) => {
       body: JSON.stringify({ coach_id: coachId, tier, payment_ref: paymentRef }),
     });
 
-    console.log('Subscription recorded:', tier, coachId, res.status);
+    if (!res.ok) {
+      console.error('[paymob-webhook] failed to record subscription:', await res.text());
+    }
   } else {
     // ─── Program purchase ─────────────────────────────────────────────────
     const [programId, userId] = parts;
     if (!programId || !userId) {
-      console.error('Cannot extract programId/userId from merchant_order_id:', merchantOrderId);
+      console.error('[paymob-webhook] invalid purchase merchant_order_id:', merchantOrderId);
       return new Response('Invalid merchant_order_id', { status: 400 });
     }
 
@@ -159,7 +161,9 @@ Deno.serve(async (req) => {
       body: JSON.stringify({ program_id: programId, client_id: userId }),
     });
 
-    console.log('Purchase recorded:', programId, userId, res.status);
+    if (!res.ok) {
+      console.error('[paymob-webhook] failed to record purchase:', await res.text());
+    }
   }
 
   return new Response(JSON.stringify({ received: true, recorded: true }), {

@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { useFocusEffect, router } from 'expo-router';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useNotificationStore } from '../../src/stores/notificationStore';
 import { supabase } from '../../src/lib/supabase';
@@ -87,10 +87,11 @@ export default function HomeScreen() {
 
   const isCoach = profile.role === 'coach';
 
-  useEffect(() => {
-    let isMounted = true;
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
 
-    const loadDashboard = async () => {
+      const loadDashboard = async () => {
       const today = new Date().toISOString().slice(0, 10);
 
       if (isCoach) {
@@ -175,12 +176,13 @@ export default function HomeScreen() {
       );
     };
 
-    loadDashboard();
+      loadDashboard();
 
-    return () => {
-      isMounted = false;
-    };
-  }, [isCoach, profile.id, t]);
+      return () => {
+        isMounted = false;
+      };
+    }, [isCoach, profile.id, t])
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

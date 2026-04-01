@@ -19,13 +19,13 @@ interface ConnectionState {
   isLoading: boolean;
 
   // Coach actions
-  fetchCoachData: () => Promise<void>;
+  fetchCoachData: (silent?: boolean) => Promise<void>;
   acceptRequest: (requestId: string) => Promise<{ error: string | null }>;
   rejectRequest: (requestId: string) => Promise<{ error: string | null }>;
   removeClient: (requestId: string) => Promise<{ error: string | null }>;
 
   // Client actions
-  fetchClientData: () => Promise<void>;
+  fetchClientData: (silent?: boolean) => Promise<void>;
   sendRequest: (coachUsername: string) => Promise<{ error: string | null }>;
   cancelRequest: () => Promise<{ error: string | null }>;
   disconnectFromCoach: () => Promise<{ error: string | null }>;
@@ -38,8 +38,8 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
   myRequest: null,
   isLoading: false,
 
-  fetchCoachData: async () => {
-    set({ isLoading: true });
+  fetchCoachData: async (silent = false) => {
+    if (!silent) set({ isLoading: true });
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return set({ isLoading: false });
 
@@ -107,7 +107,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
       });
     }
 
-    await get().fetchCoachData();
+    await get().fetchCoachData(true);
     return { error: null };
   },
 
@@ -131,7 +131,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
       });
     }
 
-    await get().fetchCoachData();
+    await get().fetchCoachData(true);
     return { error: null };
   },
 
@@ -142,12 +142,12 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
       .eq('id', requestId);
 
     if (error) return { error: error.message };
-    await get().fetchCoachData();
+    await get().fetchCoachData(true);
     return { error: null };
   },
 
-  fetchClientData: async () => {
-    set({ isLoading: true });
+  fetchClientData: async (silent = false) => {
+    if (!silent) set({ isLoading: true });
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return set({ isLoading: false });
 
@@ -189,12 +189,14 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
     if (coach.role !== 'coach') return { error: 'That user is not a coach.' };
     if (coach.id === user.id) return { error: 'You cannot connect with yourself.' };
 
-    // Check for existing request
+    // Check for existing request — use limit(1) to handle multiple rows (e.g. repeated remove/re-add)
     const { data: existing } = await supabase
       .from('coach_client_requests')
       .select('id, status')
       .eq('coach_id', coach.id)
       .eq('client_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (existing) {
@@ -214,7 +216,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
         body: 'A client wants to connect with you.',
         data: { request_type: 'new_request' },
       });
-      await get().fetchClientData();
+      await get().fetchClientData(true);
       return { error: null };
     }
 
@@ -233,7 +235,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
       data: { request_type: 'new_request' },
     });
 
-    await get().fetchClientData();
+    await get().fetchClientData(true);
     return { error: null };
   },
 

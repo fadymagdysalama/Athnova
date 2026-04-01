@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { invokeEdgeFunction } from '../lib/invokeEdgeFunction';
 import { supabase } from '../lib/supabase';
 import type {
   PublicProgram,
@@ -67,9 +68,10 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
 
     const { data, error } = await query;
     if (!error) {
-      set({ publicPrograms: (data as PublicProgram[]) ?? [] });
+      set({ publicPrograms: (data as PublicProgram[]) ?? [], isLoading: false });
+    } else {
+      set({ isLoading: false });
     }
-    set({ isLoading: false });
   },
 
   // ─── Fetch purchases for current user ────────────────────────────────────
@@ -166,17 +168,21 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
     }
 
     // Paid program: get Paymob payment URL from edge function
-    const { data: orderData, error: fnError } = await supabase.functions.invoke(
-      'create-paymob-order',
-      { body: { programId, userId: user.id } },
-    );
+    const { data: orderData, error: fnError, status, responseText } = await invokeEdgeFunction<{
+      paymentUrl?: string;
+      error?: string;
+    }>('create-paymob-order', { programId, userId: user.id });
 
-    if (fnError) return { error: fnError.message };
+    if (fnError) {
+      console.error('create-paymob-order invoke failed:', status, responseText || fnError);
+      return { error: orderData?.error ?? fnError };
+    }
     if (orderData?.error) return { error: orderData.error };
+    if (!orderData?.paymentUrl) return { error: 'Missing payment URL from create-paymob-order' };
 
     // Return the payment URL; the screen opens it in the browser.
     // Purchase is recorded by the paymob-webhook after successful payment.
-    return { error: null, paymentUrl: orderData.paymentUrl as string };
+    return { error: null, paymentUrl: orderData.paymentUrl };
   },
 
   // ─── Coach: toggle publish ────────────────────────────────────────────────
@@ -249,16 +255,20 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
     }
 
     // Pro / Business — initiate Paymob payment
-    const { data: orderData, error: fnError } = await supabase.functions.invoke(
-      'paymob-subscription',
-      { body: { tier } },
-    );
+    const { data: orderData, error: fnError, status, responseText } = await invokeEdgeFunction<{
+      paymentUrl?: string;
+      error?: string;
+    }>('paymob-subscription', { tier });
 
-    if (fnError) return { error: fnError.message };
+    if (fnError) {
+      console.error('paymob-subscription invoke failed:', status, responseText || fnError);
+      return { error: orderData?.error ?? fnError };
+    }
     if (orderData?.error) return { error: orderData.error };
+    if (!orderData?.paymentUrl) return { error: 'Missing payment URL from paymob-subscription' };
 
     // Return paymentUrl — the screen opens it in the browser.
     // Subscription is recorded by paymob-webhook after successful payment.
-    return { error: null, paymentUrl: orderData.paymentUrl as string };
+    return { error: null, paymentUrl: orderData.paymentUrl };
   },
 }));

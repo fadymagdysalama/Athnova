@@ -7,7 +7,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
   // Handle CORS pre-flight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -18,7 +18,30 @@ Deno.serve(async (req) => {
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const authHeader = req.headers.get('Authorization') ?? '';
+
+  if (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey) {
+    console.error('[send-push] missing required env');
+    return new Response('Missing Supabase env', { status: 500, headers: corsHeaders });
+  }
+
+  const userRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: {
+      apikey: supabaseAnonKey,
+      Authorization: authHeader,
+    },
+  });
+
+  const userResponseText = await userRes.text();
+
+  if (!userRes.ok) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
 
   let body: {
     recipient_id: string;
@@ -60,7 +83,7 @@ Deno.serve(async (req) => {
   });
 
   if (insertError) {
-    console.error('Failed to insert notification:', insertError.message);
+    console.error('[send-push] failed to insert notification:', insertError.message);
     // Continue — push delivery is still attempted
   }
 
@@ -100,7 +123,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify(pushMessage),
       });
     } catch (err) {
-      console.error('Expo push delivery failed:', err);
+      console.error('[send-push] expo push delivery failed:', err);
     }
   }
 
