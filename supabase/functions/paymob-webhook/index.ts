@@ -143,7 +143,7 @@ Deno.serve(async (req: Request) => {
     };
     if (cardToken) upsertBody.payment_token = cardToken;
 
-    const res = await fetch(`${supabaseUrl}/rest/v1/coach_subscriptions`, {
+    const res = await fetch(`${supabaseUrl}/rest/v1/coach_subscriptions?on_conflict=coach_id`, {
       method: 'POST',
       headers: {
         apikey: supabaseKey,
