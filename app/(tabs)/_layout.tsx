@@ -80,6 +80,17 @@ function StoreIcon({ color }: { color: string }) {
   );
 }
 
+function LibraryIcon({ color }: { color: string }) {
+  return (
+    <View style={{ width: 22, height: 20, flexDirection: 'row', alignItems: 'flex-end', gap: 2 }}>
+      <View style={{ width: 5, height: 13, backgroundColor: color, borderRadius: 1, opacity: 0.55 }} />
+      <View style={{ width: 5, height: 18, backgroundColor: color, borderRadius: 1 }} />
+      <View style={{ width: 5, height: 15, backgroundColor: color, borderRadius: 1, opacity: 0.75 }} />
+      <View style={{ width: 5, height: 20, backgroundColor: color, borderRadius: 1 }} />
+    </View>
+  );
+}
+
 function GearIcon({ color }: { color: string }) {
   return (
     <View style={{ width: 22, height: 22, alignItems: 'center', justifyContent: 'center' }}>
@@ -97,6 +108,7 @@ function TabIcon({ name, focused }: { name: string; focused: boolean }) {
 
   const iconMap: Record<string, React.ReactNode> = {
     home: <HomeIcon color={color} />,
+    library: <LibraryIcon color={color} />,
     programs: <ProgramsIcon color={color} />,
     schedule: <CalendarIcon color={color} />,
     clients: <PeopleIcon color={color} />,
@@ -136,6 +148,14 @@ export default function TabLayout() {
         options={{
           title: t('tabs.home'),
           tabBarIcon: ({ focused }) => <TabIcon name="home" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="library"
+        options={{
+          title: t('tabs.library'),
+          tabBarIcon: ({ focused }) => <TabIcon name="library" focused={focused} />,
+          href: isCoach ? undefined : null, // Visible for coaches, hidden for clients
         }}
       />
       <Tabs.Screen

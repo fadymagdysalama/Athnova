@@ -16,7 +16,7 @@ interface MarketplaceState {
   isLoading: boolean;
 
   // Browse
-  fetchPublicPrograms: (difficulty?: string) => Promise<void>;
+  fetchPublicPrograms: () => Promise<void>;
 
   // Purchase checks
   fetchMyPurchases: () => Promise<void>;
@@ -50,10 +50,10 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   isLoading: false,
 
   // ─── Browse public programs ───────────────────────────────────────────────
-  fetchPublicPrograms: async (difficulty) => {
+  fetchPublicPrograms: async () => {
     set({ isLoading: true });
 
-    let query = supabase
+    const { data, error } = await supabase
       .from('programs')
       .select(`
         *,
@@ -63,11 +63,6 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
       .eq('is_published', true)
       .order('created_at', { ascending: false });
 
-    if (difficulty && difficulty !== 'all') {
-      query = query.eq('difficulty', difficulty);
-    }
-
-    const { data, error } = await query;
     if (!error) {
       set({ publicPrograms: (data as PublicProgram[]) ?? [], isLoading: false });
     } else {

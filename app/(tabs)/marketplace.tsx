@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -16,14 +16,6 @@ import { useMarketplaceStore } from '../../src/stores/marketplaceStore';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 import type { PublicProgram } from '../../src/types';
 
-const DIFFICULTY_COLOR: Record<string, string> = {
-  beginner: colors.success,
-  intermediate: colors.warning,
-  advanced: colors.error,
-};
-
-const FILTERS = ['all', 'beginner', 'intermediate', 'advanced'] as const;
-type Filter = typeof FILTERS[number];
 
 // ─── Public program card for CLIENT browse ────────────────────────────────────
 function ProgramCard({
@@ -36,7 +28,6 @@ function ProgramCard({
   onPress: () => void;
 }) {
   const { t } = useTranslation();
-  const diffColor = DIFFICULTY_COLOR[program.difficulty] ?? colors.accent;
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
@@ -48,11 +39,6 @@ function ProgramCard({
               <Text style={styles.purchasedBadgeText}>{t('marketplace.purchased')}</Text>
             </View>
           )}
-        </View>
-        <View style={[styles.diffBadge, { backgroundColor: `${diffColor}18` }]}>
-          <Text style={[styles.diffText, { color: diffColor }]}>
-            {t(`programs.${program.difficulty}` as any)}
-          </Text>
         </View>
       </View>
 
@@ -93,33 +79,21 @@ function ClientMarketplaceView() {
   const router = useRouter();
   const { publicPrograms, purchases, isLoading, fetchPublicPrograms, fetchMyPurchases, isPurchased, purchaseProgram } =
     useMarketplaceStore();
-  const [filter, setFilter] = useState<Filter>('all');
   const [refreshing, setRefreshing] = useState(false);
+
   const [purchasing, setPurchasing] = useState<string | null>(null);
 
-  // Keep a ref so the stable useFocusEffect callback always sees the current filter
-  const filterRef = useRef<Filter>('all');
-  filterRef.current = filter;
-
-  // Tab-focus refresh (stable callback, reads filter from ref)
+  // Tab-focus refresh
   useFocusEffect(
     useCallback(() => {
-      fetchPublicPrograms(filterRef.current);
+      fetchPublicPrograms();
       fetchMyPurchases();
     }, [])
   );
 
-  // Filter-change fetch — skip the very first render (handled by useFocusEffect above)
-  const isFirstFocus = useRef(true);
-  useEffect(() => {
-    if (isFirstFocus.current) { isFirstFocus.current = false; return; }
-    fetchPublicPrograms(filter);
-    fetchMyPurchases();
-  }, [filter]);
-
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchPublicPrograms(filter);
+    await fetchPublicPrograms();
     await fetchMyPurchases();
     setRefreshing(false);
   };
@@ -174,20 +148,6 @@ function ClientMarketplaceView() {
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
     >
-      {/* Filter chips */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
-        {FILTERS.map((f) => (
-          <TouchableOpacity
-            key={f}
-            style={[styles.filterChip, filter === f && styles.filterChipActive]}
-            onPress={() => setFilter(f)}
-          >
-            <Text style={[styles.filterChipText, filter === f && styles.filterChipTextActive]}>
-              {t(`marketplace.filter${f.charAt(0).toUpperCase() + f.slice(1)}` as any)}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
 
       {publicPrograms.length === 0 ? (
         <View style={styles.emptyBox}>

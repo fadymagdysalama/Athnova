@@ -438,7 +438,12 @@ export default function ClientProgressScreen() {
                   100,
                 );
                 return (
-                  <View key={prog.programId} style={styles.progCard}>
+                  <TouchableOpacity
+                    key={prog.programId}
+                    style={styles.progCard}
+                    onPress={() => router.push({ pathname: '/programs/detail', params: { id: prog.programId } })}
+                    activeOpacity={0.8}
+                  >
                     <View style={styles.progCardHeader}>
                       <Text style={styles.progCardTitle} numberOfLines={1}>
                         {prog.programTitle}
@@ -446,6 +451,7 @@ export default function ClientProgressScreen() {
                       <Text style={styles.progCardMeta}>
                         {t('progress.completedOf', { done: prog.completedDayIds.length, total: prog.totalDays })}
                       </Text>
+                      <Text style={styles.progCardChevron}>›</Text>
                     </View>
                     <View style={styles.progressTrack}>
                       <View style={[styles.progressFill, { width: `${Math.round(donePct)}%` as any }]} />
@@ -471,7 +477,7 @@ export default function ClientProgressScreen() {
                         );
                       })}
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 );
               })
             )}
@@ -733,6 +739,7 @@ const styles = StyleSheet.create({
   progCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   progCardTitle: { flex: 1, fontSize: fontSize.md, fontWeight: '800', color: colors.text, marginRight: spacing.sm, letterSpacing: -0.2 },
   progCardMeta: { fontSize: fontSize.sm, fontWeight: '700', color: colors.accent },
+  progCardChevron: { fontSize: 22, color: colors.textMuted, fontWeight: '300', marginLeft: spacing.xs },
   progressTrack: {
     height: 8,
     backgroundColor: colors.surfaceLight,

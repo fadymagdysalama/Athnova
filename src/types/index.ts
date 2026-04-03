@@ -27,7 +27,7 @@ export interface Program {
   title: string;
   description: string;
   duration_days: number;
-  difficulty: 'beginner' | 'intermediate' | 'advanced';
+  difficulty?: string;
   type: 'private' | 'public';
   price: number | null;
   is_published: boolean;
@@ -51,6 +51,7 @@ export interface ProgramExercise {
   notes: string | null;
   order_index: number;
   superset_group: number | null;
+  weight: string | null;
 }
 
 export interface ProgramAssignment {
@@ -60,6 +61,7 @@ export interface ProgramAssignment {
   assigned_by: string;
   current_day: number;
   started_at: string;
+  completed_days_count?: number;
   // Joined
   program?: Program;
 }
@@ -72,6 +74,20 @@ export interface ProgramWithDays extends Program {
   days: ProgramDayWithExercises[];
 }
 
+export type ExerciseCategory = 'push' | 'pull' | 'legs' | 'core' | 'cardio' | 'other';
+
+export interface ExerciseTemplate {
+  id: string;
+  coach_id: string;
+  name: string;
+  category: string; // built-in ('push'|'pull'|'legs'|'core'|'cardio'|'other') or custom
+  video_url: string | null;
+  default_notes: string | null;
+  default_sets: string | null;
+  default_reps: string | null;
+  created_at: string;
+}
+
 export interface Session {
   id: string;
   coach_id: string;
@@ -81,6 +97,8 @@ export interface Session {
   status: 'scheduled' | 'cancelled' | 'completed';
   notes: string | null;
   max_clients: number | null;
+  booking_cutoff_hours: number;
+  cancellation_cutoff_hours: number;
   created_at: string;
 }
 

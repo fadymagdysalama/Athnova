@@ -95,6 +95,7 @@ export default function HomeScreen() {
     id: string;
     program_id: string;
     current_day: number;
+    completedCount: number;
     program: { title: string; duration_days: number };
   }>>([]);
 
@@ -154,7 +155,7 @@ export default function HomeScreen() {
           .order('started_at', { ascending: false }),
         supabase
           .from('workout_logs')
-          .select('id', { count: 'exact', head: true })
+          .select('program_id, day_id')
           .eq('client_id', profile.id),
         supabase
           .from('session_clients')
@@ -163,6 +164,14 @@ export default function HomeScreen() {
       ]);
 
       const sessionIds = (sessionIdsRes.data ?? []).map((item: any) => item.session_id as string);
+      const workoutsData = (workoutsRes.data ?? []) as Array<{ program_id: string; day_id: string }>;
+
+      // Per-program completion count
+      const logCountByProgram: Record<string, number> = {};
+      for (const log of workoutsData) {
+        logCountByProgram[log.program_id] = (logCountByProgram[log.program_id] ?? 0) + 1;
+      }
+
       const sessionsRes = sessionIds.length > 0
         ? await supabase
             .from('sessions')
@@ -188,36 +197,47 @@ export default function HomeScreen() {
 
       setStats({
         primaryCount: assignmentsRes.count ?? 0,
-        secondaryCount: workoutsRes.count ?? 0,
+        secondaryCount: workoutsData.length,
         primaryLabel: t('home.activePrograms'),
         secondaryLabel: t('home.daysDone'),
       });
-      setActivePrograms(validAssignments.map((a) => ({ ...a, program: a.program! })));
+      setActivePrograms(validAssignments.map((a) => ({
+        ...a,
+        program: a.program!,
+        completedCount: logCountByProgram[a.program_id] ?? 0,
+      })));
       setUpcomingSessions((sessionsRes.data as UpcomingSessionItem[] | null) ?? []);
 
-      // Fetch today's workout exercises for the first active program
+      // Find the next incomplete workout day for the first active program
       if (firstAssignment?.program) {
-        const { data: dayData } = await supabase
+        const completedDayIdsForProgram = new Set(
+          workoutsData
+            .filter((l) => l.program_id === firstAssignment.program_id)
+            .map((l) => l.day_id),
+        );
+
+        const { data: allDays } = await supabase
           .from('program_days')
-          .select('id')
+          .select('id, day_number')
           .eq('program_id', firstAssignment.program_id)
-          .eq('day_number', firstAssignment.current_day)
-          .maybeSingle();
+          .order('day_number', { ascending: true });
 
         if (!isMounted) return;
 
-        if (dayData) {
+        const nextDay = (allDays ?? []).find((d: any) => !completedDayIdsForProgram.has(d.id));
+
+        if (nextDay) {
           const { data: exercises } = await supabase
             .from('program_exercises')
             .select('exercise_name, sets, reps')
-            .eq('day_id', dayData.id)
+            .eq('day_id', nextDay.id)
             .order('order_index', { ascending: true })
             .limit(3);
 
           if (!isMounted) return;
           setTodayWorkout({
             programTitle: firstAssignment.program!.title,
-            currentDay: firstAssignment.current_day,
+            currentDay: nextDay.day_number,
             totalDays: firstAssignment.program!.duration_days,
             programId: firstAssignment.program_id,
             exercises: (exercises ?? []) as Array<{ exercise_name: string; sets: number; reps: string }>,
@@ -298,7 +318,12 @@ export default function HomeScreen() {
             </View>
           ) : (
             upcomingSessions.map((session) => (
-              <View key={session.id} style={styles.sessionCard}>
+              <TouchableOpacity
+                key={session.id}
+                style={styles.sessionCard}
+                onPress={() => router.push({ pathname: '/sessions/detail', params: { sessionId: session.id } })}
+                activeOpacity={0.8}
+              >
                 <View style={styles.sessionCardHeader}>
                   <View style={styles.sessionCalendarBadge}>
                     <Text style={styles.sessionCalendarDay}>{formatSessionDate(session.date).split(' ')[2] ?? ''}</Text>
@@ -309,50 +334,17 @@ export default function HomeScreen() {
                     <Text style={styles.sessionTime}>{formatSessionTime(session.start_time)}</Text>
                     {!!session.notes && <Text style={styles.sessionNotes}>{session.notes}</Text>}
                   </View>
+                  <Text style={styles.sessionChevron}>›</Text>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))
           )}
         </View>
 
         {!isCoach && (
           <>
-            {activePrograms.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>{t('home.activePrograms')}</Text>
-                {activePrograms.map((prog) => {
-                  const pct = Math.min(
-                    ((prog.current_day - 1) / Math.max(prog.program.duration_days, 1)) * 100,
-                    100,
-                  );
-                  return (
-                    <TouchableOpacity
-                      key={prog.id}
-                      style={styles.programCard}
-                      onPress={() =>
-                        router.push({ pathname: '/programs/detail', params: { id: prog.program_id } })
-                      }
-                      activeOpacity={0.8}
-                    >
-                      <View style={styles.programCardHeader}>
-                        <Text style={styles.programCardTitle} numberOfLines={1}>
-                          {prog.program.title}
-                        </Text>
-                        <Text style={styles.programCardDay}>
-                          Day {prog.current_day}/{prog.program.duration_days}
-                        </Text>
-                      </View>
-                      <View style={styles.progressTrack}>
-                        <View style={[styles.progressFill, { width: `${Math.round(pct)}%` as any }]} />
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            )}
-
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Today's Workout</Text>
+              <Text style={styles.sectionTitle}>{t('home.nextWorkout')}</Text>
               {todayWorkout ? (
                 <TouchableOpacity
                   style={styles.workoutCard}
@@ -621,6 +613,13 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: spacing.sm,
     lineHeight: 20,
+  },
+  sessionChevron: {
+    fontSize: 22,
+    color: colors.textMuted,
+    fontWeight: '300',
+    alignSelf: 'center',
+    marginLeft: spacing.sm,
   },
   workoutCard: {
     backgroundColor: colors.surface,

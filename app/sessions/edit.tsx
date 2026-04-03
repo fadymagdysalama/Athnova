@@ -72,6 +72,8 @@ export default function EditSessionScreen() {
   const [notes, setNotes] = useState('');
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [originalClientIds, setOriginalClientIds] = useState<string[]>([]);
+  const [bookingCutoffHours, setBookingCutoffHours] = useState(2);
+  const [cancellationCutoffHours, setCancellationCutoffHours] = useState(2);
 
   // Date picker state
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -102,6 +104,8 @@ export default function EditSessionScreen() {
     setDuration(String(currentSession.duration_minutes));
     setMaxClients(currentSession.max_clients != null ? String(currentSession.max_clients) : '');
     setNotes(currentSession.notes ?? '');
+    setBookingCutoffHours(currentSession.booking_cutoff_hours ?? 2);
+    setCancellationCutoffHours(currentSession.cancellation_cutoff_hours ?? 2);
 
     const ids = currentSession.clients.map((c) => c.id);
     setSelectedClientIds(ids);
@@ -162,6 +166,8 @@ export default function EditSessionScreen() {
       duration_minutes: durationNum,
       notes: notes.trim() || null,
       max_clients: maxClientsNum,
+      booking_cutoff_hours: bookingCutoffHours,
+      cancellation_cutoff_hours: cancellationCutoffHours,
     });
 
     if (updateError) {
@@ -297,6 +303,42 @@ export default function EditSessionScreen() {
               placeholderTextColor={colors.textMuted}
             />
             <Text style={styles.fieldHint}>{t('schedule.maxClientsHint')}</Text>
+          </View>
+
+          {/* ── Booking Policy ── */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>{t('schedule.bookingCutoff')}</Text>
+            <View style={styles.stepperRow}>
+              <TouchableOpacity style={styles.stepperBtn} onPress={() => setBookingCutoffHours((h) => Math.max(0, h - 1))} activeOpacity={0.8}>
+                <Text style={styles.stepperBtnText}>−</Text>
+              </TouchableOpacity>
+              <View style={styles.stepperValueBox}>
+                <Text style={styles.stepperValue}>{bookingCutoffHours}</Text>
+                <Text style={styles.stepperUnit}>{t('schedule.hoursBeforeStart')}</Text>
+              </View>
+              <TouchableOpacity style={styles.stepperBtn} onPress={() => setBookingCutoffHours((h) => h + 1)} activeOpacity={0.8}>
+                <Text style={styles.stepperBtnText}>+</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.fieldHint}>{t('schedule.bookingCutoffHint')}</Text>
+          </View>
+
+          {/* ── Cancellation Policy ── */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>{t('schedule.cancellationCutoff')}</Text>
+            <View style={styles.stepperRow}>
+              <TouchableOpacity style={styles.stepperBtn} onPress={() => setCancellationCutoffHours((h) => Math.max(0, h - 1))} activeOpacity={0.8}>
+                <Text style={styles.stepperBtnText}>−</Text>
+              </TouchableOpacity>
+              <View style={styles.stepperValueBox}>
+                <Text style={styles.stepperValue}>{cancellationCutoffHours}</Text>
+                <Text style={styles.stepperUnit}>{t('schedule.hoursBeforeStart')}</Text>
+              </View>
+              <TouchableOpacity style={styles.stepperBtn} onPress={() => setCancellationCutoffHours((h) => h + 1)} activeOpacity={0.8}>
+                <Text style={styles.stepperBtnText}>+</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.fieldHint}>{t('schedule.cancellationCutoffHint')}</Text>
           </View>
 
           {/* ── Participants ── */}
@@ -523,6 +565,12 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
 
+  stepperRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: borderRadius.sm, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
+  stepperBtn: { width: 52, height: 52, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card },
+  stepperBtnText: { fontSize: 24, fontWeight: '300', color: colors.primary, lineHeight: 28 },
+  stepperValueBox: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.sm },
+  stepperValue: { fontSize: fontSize.xl, fontWeight: '800', color: colors.text, letterSpacing: -0.5 },
+  stepperUnit: { fontSize: fontSize.xs, fontWeight: '600', color: colors.textMuted, marginTop: 1 },
   saveBtn: {
     backgroundColor: colors.primary,
     borderRadius: borderRadius.md,

@@ -115,7 +115,7 @@ export default function SessionDetailScreen() {
     if (!currentSession) return;
 
     if (isWithinNoticeWindow(currentSession)) {
-      Alert.alert(t('common.error'), t('schedule.noticeError'));
+      Alert.alert(t('schedule.cancelNotAllowed'), t('schedule.noticeError'));
       return;
     }
 
@@ -241,6 +241,21 @@ export default function SessionDetailScreen() {
               </View>
             ) : null
           )}
+        </View>
+
+        {/* ── Booking & Cancellation Policy ── */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{t('schedule.policy')}</Text>
+          <View style={styles.policyCard}>
+            <View style={styles.policyRow}>
+              <Text style={styles.policyDot}>{'•'}</Text>
+              <Text style={styles.policyText}>{t('schedule.bookingClosedAt', { hours: session.booking_cutoff_hours })}</Text>
+            </View>
+            <View style={[styles.policyRow, { borderBottomWidth: 0 }]}>
+              <Text style={styles.policyDot}>{'•'}</Text>
+              <Text style={styles.policyText}>{t('schedule.cancellationClosedAt', { hours: session.cancellation_cutoff_hours })}</Text>
+            </View>
+          </View>
         </View>
 
         {/* ── Notes ── */}
@@ -400,6 +415,10 @@ const styles = StyleSheet.create({
   notesText: { fontSize: fontSize.sm, color: colors.textSecondary, lineHeight: 20 },
 
   // Action buttons
+  policyCard: { backgroundColor: colors.card, borderRadius: borderRadius.sm, padding: spacing.md, borderWidth: 1, borderColor: colors.borderLight },
+  policyRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.borderLight },
+  policyDot: { color: colors.primary, fontWeight: '800', marginRight: spacing.sm, fontSize: fontSize.md },
+  policyText: { flex: 1, fontSize: fontSize.sm, color: colors.textSecondary, lineHeight: 18 },
   cancelBtn: {
     backgroundColor: colors.error + '12',
     borderRadius: borderRadius.md,

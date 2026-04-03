@@ -28,19 +28,18 @@ interface ProgramState {
   createProgram: (data: {
     title: string;
     description: string;
-    difficulty: 'beginner' | 'intermediate' | 'advanced';
     duration_days: number;
     type: 'private' | 'public';
   }) => Promise<{ id: string | null; error: string | null }>;
   deleteProgram: (id: string) => Promise<{ error: string | null }>;
-  updateProgram: (id: string, data: { title: string; description: string; difficulty: 'beginner' | 'intermediate' | 'advanced' }) => Promise<{ error: string | null }>;
+  updateProgram: (id: string, data: { title: string; description: string }) => Promise<{ error: string | null }>;
   addDay: (programId: string, dayNumber: number) => Promise<{ id: string | null; error: string | null }>;
   addExercise: (
     dayId: string,
-    data: { exercise_name: string; sets: number; reps: string; rest_time: string; notes: string; video_url?: string; order_index: number; superset_group?: number | null }
+    data: { exercise_name: string; sets: number; reps: string; rest_time: string; notes: string; video_url?: string; order_index: number; superset_group?: number | null; weight?: string | null }
   ) => Promise<{ id: string | null; error: string | null }>;
   deleteExercise: (id: string) => Promise<{ error: string | null }>;
-  updateExercise: (id: string, data: { exercise_name: string; sets: number; reps: string; rest_time: string; notes: string; video_url?: string; order_index: number; superset_group?: number | null }) => Promise<{ error: string | null }>;
+  updateExercise: (id: string, data: { exercise_name: string; sets: number; reps: string; rest_time: string; notes: string; video_url?: string; order_index: number; superset_group?: number | null; weight?: string | null }) => Promise<{ error: string | null }>;
   assignProgram: (programId: string, clientId: string) => Promise<{ error: string | null }>;
   unassignProgram: (programId: string, clientId: string) => Promise<{ error: string | null }>;
   fetchProgramAssignments: (programId: string) => Promise<string[]>; // returns clientIds
@@ -343,6 +342,16 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
     // Filter out rows where the joined program is null (deleted / RLS blocked)
     const validRows = assignmentRows.filter((row: any) => row.program != null);
 
+    // Fetch actual completed-day counts from workout_logs
+    const { data: logRows } = await supabase
+      .from('workout_logs')
+      .select('program_id')
+      .eq('client_id', user.id);
+    const logCountByProgram: Record<string, number> = {};
+    for (const log of (logRows ?? []) as Array<{ program_id: string }>) {
+      logCountByProgram[log.program_id] = (logCountByProgram[log.program_id] ?? 0) + 1;
+    }
+
     // For each assignment, load days + exercises
     const enriched = await Promise.all(
       validRows.map(async (row: any) => {
@@ -366,6 +375,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
         return {
           ...row,
           program: { ...row.program, days: daysWithExercises },
+          completed_days_count: logCountByProgram[row.program_id] ?? 0,
         };
       })
     );

@@ -14,6 +14,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useSessionStore } from '../../src/stores/sessionStore';
+import { isWithinNoticeWindow, isBookingClosed } from '../../src/stores/sessionStore';
 import { useConnectionStore } from '../../src/stores/connectionStore';
 import { CalendarPicker } from '../../src/components/CalendarPicker';
 import { colors, fontSize, spacing, borderRadius } from '../../src/constants/theme';
@@ -186,6 +187,9 @@ function BookableCard({
         {session.notes ? (
           <Text style={styles.cardNotes} numberOfLines={1}>{session.notes}</Text>
         ) : null}
+        <Text style={styles.policyNote}>
+          {t('schedule.bookingClosedAt', { hours: session.booking_cutoff_hours })} · {t('schedule.cancellationClosedAt', { hours: session.cancellation_cutoff_hours })}
+        </Text>
         <View style={styles.cardBottomRow}>
           <View style={{ flex: 1 }} />
           <TouchableOpacity
@@ -281,6 +285,11 @@ export default function ScheduleScreen() {
       return;
     }
 
+    if (isBookingClosed(session)) {
+      Alert.alert(t('common.error'), t('schedule.bookingClosed'));
+      return;
+    }
+
     setBookingId(session.id);
     const { error } = await bookSession(session.id);
     setBookingId(null);
@@ -312,6 +321,10 @@ export default function ScheduleScreen() {
   }
 
   async function handleCancel(session: SessionWithClients) {
+    if (isWithinNoticeWindow(session)) {
+      Alert.alert(t('schedule.cancelNotAllowed'), t('schedule.noticeError'));
+      return;
+    }
     Alert.alert(
       t('schedule.confirmLeave'),
       t('schedule.leaveSession'),
@@ -614,4 +627,5 @@ const styles = StyleSheet.create({
   },
   bookBtnDisabled: { opacity: 0.55 },
   bookBtnText: { color: '#fff', fontSize: fontSize.sm, fontWeight: '800' },
+  policyNote: { fontSize: fontSize.xs, color: colors.textMuted, marginTop: spacing.xs, marginBottom: spacing.xs, fontStyle: 'italic' },
 });

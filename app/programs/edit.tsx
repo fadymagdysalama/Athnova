@@ -14,8 +14,8 @@ import { useTranslation } from 'react-i18next';
 import { useProgramStore } from '../../src/stores/programStore';
 import { supabase } from '../../src/lib/supabase';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
-
-type Difficulty = 'beginner' | 'intermediate' | 'advanced';
+import { ExerciseLibraryDrawer } from '../../src/components/ExerciseLibraryDrawer';
+import type { ExerciseTemplate } from '../../src/types';
 
 interface ExerciseDraft {
   id: string | null; // null = newly added, not yet in DB
@@ -28,6 +28,7 @@ interface ExerciseDraft {
   video_url: string;
   order_index: number;
   superset_group: number | null;
+  weight: string;
 }
 
 interface DayDraft {
@@ -84,9 +85,9 @@ export default function EditProgramScreen() {
   const [saving, setSaving] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [difficulty, setDifficulty] = useState<Difficulty>('beginner');
   const [days, setDays] = useState<DayDraft[]>([]);
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
+  const [libraryDayId, setLibraryDayId] = useState<string | null>(null);
 
   useEffect(() => {
     if (id) fetchProgramWithDays(id);
@@ -96,7 +97,6 @@ export default function EditProgramScreen() {
     if (!currentProgram) return;
     setTitle(currentProgram.title);
     setDescription(currentProgram.description ?? '');
-    setDifficulty(currentProgram.difficulty as Difficulty);
     const drafts: DayDraft[] = (currentProgram.days ?? []).map((day) => ({
       id: day.id,
       day_number: day.day_number,
@@ -111,6 +111,7 @@ export default function EditProgramScreen() {
         video_url: (ex as any).video_url ?? '',
         order_index: (ex as any).order_index ?? i,
         superset_group: (ex as any).superset_group ?? null,
+        weight: String((ex as any).weight ?? ''),
       })),
     }));
     setDays(drafts);
@@ -128,18 +129,19 @@ export default function EditProgramScreen() {
     );
   };
 
-  const addLocal = (dayId: string) => {
+  const addLocal = (dayId: string, template?: ExerciseTemplate) => {
     const newEx: ExerciseDraft = {
       id: null,
       key: `new-${Date.now()}`,
-      exercise_name: '',
-      sets: '3',
-      reps: '10',
+      exercise_name: template?.name ?? '',
+      sets: template?.default_sets ?? '3',
+      reps: template?.default_reps ?? '10',
       rest_time: '60s',
-      notes: '',
-      video_url: '',
+      notes: template?.default_notes ?? '',
+      video_url: template?.video_url ?? '',
       order_index: 0,
       superset_group: null,
+      weight: '',
     };
     setDays((prev) =>
       prev.map((d) => d.id !== dayId ? d : { ...d, exercises: [...d.exercises, newEx] })
@@ -217,7 +219,7 @@ export default function EditProgramScreen() {
     if (!title.trim()) return Alert.alert(t('common.error'), t('programs.programNameRequired'));
     setSaving(true);
 
-    const { error: progErr } = await updateProgram(id!, { title: title.trim(), description: description.trim(), difficulty });
+    const { error: progErr } = await updateProgram(id!, { title: title.trim(), description: description.trim() });
     if (progErr) { setSaving(false); return Alert.alert(t('common.error'), progErr); }
 
     for (const day of days) {
@@ -235,6 +237,7 @@ export default function EditProgramScreen() {
           video_url: ex.video_url.trim(),
           order_index: i,
           superset_group: ex.superset_group ?? null,
+          weight: ex.weight.trim() || null,
         };
         if (!data.exercise_name) continue;
         if (ex.id) {
@@ -262,8 +265,6 @@ export default function EditProgramScreen() {
   if (isLoading || !currentProgram) {
     return <View style={styles.centered}><ActivityIndicator size="large" color={colors.primary} /></View>;
   }
-
-  const difficulties: Difficulty[] = ['beginner', 'intermediate', 'advanced'];
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -311,29 +312,6 @@ export default function EditProgramScreen() {
               numberOfLines={3}
               placeholderTextColor={colors.textMuted}
             />
-          </View>
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>{t('programs.difficulty')}</Text>
-            <View style={styles.segmentTrack}>
-              {difficulties.map((d) => {
-                const diffColor =
-                  d === 'beginner' ? colors.success :
-                  d === 'intermediate' ? colors.warning : colors.error;
-                const active = difficulty === d;
-                return (
-                  <TouchableOpacity
-                    key={d}
-                    style={[styles.segmentItem, active && { backgroundColor: diffColor }]}
-                    onPress={() => setDifficulty(d)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
-                      {t(`programs.${d}` as any)}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
           </View>
         </View>
 
@@ -470,6 +448,16 @@ export default function EditProgramScreen() {
                             onChangeText={(v) => updateLocal(day.id, ex.key, 'rest_time', v)}
                           />
                         </View>
+                        <View style={[styles.fieldGroup, { flex: 1 }]}>
+                          <Text style={styles.miniLabel}>{t('programs.weight')}</Text>
+                          <TextInput
+                            style={styles.inputMini}
+                            placeholder="e.g. 20kg"
+                            placeholderTextColor={colors.textMuted}
+                            value={ex.weight}
+                            onChangeText={(v) => updateLocal(day.id, ex.key, 'weight', v)}
+                          />
+                        </View>
                       </View>
 
                       {/* Notes */}
@@ -498,14 +486,33 @@ export default function EditProgramScreen() {
                   )}
                   </React.Fragment>
                 ))}
-                <TouchableOpacity style={styles.addExBtn} onPress={() => addLocal(day.id)}>
-                  <Text style={styles.addExBtnText}>+ {t('programs.addExercise')}</Text>
-                </TouchableOpacity>
+                <View style={styles.addExRow}>
+                  <TouchableOpacity
+                    style={styles.addExBtn}
+                    onPress={() => addLocal(day.id)}
+                  >
+                    <Text style={styles.addExBtnText}>+ {t('programs.addExercise')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.libraryBtn}
+                    onPress={() => setLibraryDayId(day.id)}
+                  >
+                    <Text style={styles.libraryBtnText}>📚 {t('library.fromLibrary')}</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             )}
           </View>
         ))}
       </ScrollView>
+
+      <ExerciseLibraryDrawer
+        visible={libraryDayId !== null}
+        onClose={() => setLibraryDayId(null)}
+        onSelect={(template) => {
+          if (libraryDayId) addLocal(libraryDayId, template);
+        }}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -672,12 +679,35 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   removeExText: { fontSize: 14, color: colors.error, fontWeight: '700', lineHeight: 16 },
-  addExBtn: {
-    borderWidth: 1.5, borderColor: colors.accent, borderStyle: 'dashed',
-    borderRadius: borderRadius.full, paddingVertical: spacing.sm,
-    alignItems: 'center', backgroundColor: colors.accentFaded,
+  addExRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
-  addExBtnText: { fontSize: fontSize.sm, fontWeight: '700', color: colors.accent },
+  addExBtn: {
+    flex: 1,
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.full,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  addExBtnText: { fontSize: fontSize.sm, fontWeight: '700', color: '#fff' },
+  libraryBtn: {
+    backgroundColor: colors.accentFaded,
+    borderRadius: borderRadius.full,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.accent,
+  },
+  libraryBtnText: { fontSize: fontSize.sm, fontWeight: '700', color: colors.accent },
 
   // Reorder buttons
   reorderBtn: {
@@ -720,4 +750,21 @@ const editStyles = StyleSheet.create({
   ssPillLinked: { backgroundColor: `${SS_COLOR}18`, borderColor: SS_COLOR, borderStyle: 'solid' },
   ssPillText: { fontSize: 12, fontWeight: '500', color: colors.textMuted },
   ssPillTextLinked: { color: SS_COLOR, fontWeight: '700' },
+  // Weight unit toggle
+  unitToggle: {
+    flexDirection: 'row',
+    borderRadius: borderRadius.sm,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: colors.border,
+  },
+  unitBtn: {
+    flex: 1,
+    paddingVertical: 6,
+    alignItems: 'center' as const,
+    backgroundColor: colors.card,
+  },
+  unitBtnActive: { backgroundColor: colors.primary },
+  unitBtnText: { fontSize: fontSize.xs, fontWeight: '700' as const, color: colors.textMuted },
+  unitBtnTextActive: { color: '#fff' },
 });

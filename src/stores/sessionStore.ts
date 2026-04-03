@@ -15,6 +15,8 @@ interface CreateSessionData {
   notes?: string | null;
   max_clients?: number | null;
   client_ids?: string[];
+  booking_cutoff_hours?: number;
+  cancellation_cutoff_hours?: number;
 }
 
 interface UpdateSessionData {
@@ -23,6 +25,8 @@ interface UpdateSessionData {
   duration_minutes?: number;
   notes?: string | null;
   max_clients?: number | null;
+  booking_cutoff_hours?: number;
+  cancellation_cutoff_hours?: number;
 }
 
 interface SessionState {
@@ -429,11 +433,16 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
     if (error) return;
 
+    const now = Date.now();
     const available: SessionWithClients[] = (data ?? [])
       .filter((s: any) => {
         const clientIds: string[] = (s.session_clients ?? []).map((sc: any) => sc.client_id as string);
         if (clientIds.includes(user.id)) return false; // already booked
         if (s.max_clients !== null && clientIds.length >= s.max_clients) return false; // full
+        // Filter out sessions where the booking window has closed
+        const sessionStart = new Date(`${s.date}T${s.start_time}`);
+        const diffHours = (sessionStart.getTime() - now) / (1000 * 60 * 60);
+        if (diffHours < (s.booking_cutoff_hours ?? 2)) return false;
         return true;
       })
       .map((s: any) => ({
@@ -450,6 +459,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     if (!user) return { error: 'Not authenticated' };
 
     const session = get().availableSessions.find((s) => s.id === sessionId);
+
+    // Enforce booking cutoff
+    if (session) {
+      const sessionStart = new Date(`${session.date}T${session.start_time}`);
+      const diffHours = (sessionStart.getTime() - Date.now()) / (1000 * 60 * 60);
+      if (diffHours < session.booking_cutoff_hours) {
+        return { error: 'booking_closed' };
+      }
+    }
 
     const { error } = await supabase
       .from('session_clients')
@@ -493,9 +511,17 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 // ─── Helper: check if a session start is within the cancellation notice window ──
 export function isWithinNoticeWindow(
   session: Session,
-  noticeHours = 2,
+  noticeHours?: number,
 ): boolean {
+  const cutoff = noticeHours ?? session.cancellation_cutoff_hours;
   const sessionStart = new Date(`${session.date}T${session.start_time}`);
   const diffHours = (sessionStart.getTime() - Date.now()) / (1000 * 60 * 60);
-  return diffHours < noticeHours;
+  return diffHours < cutoff;
+}
+
+// ─── Helper: check if a session's booking window has closed ──────────────────
+export function isBookingClosed(session: Session): boolean {
+  const sessionStart = new Date(`${session.date}T${session.start_time}`);
+  const diffHours = (sessionStart.getTime() - Date.now()) / (1000 * 60 * 60);
+  return diffHours < session.booking_cutoff_hours;
 }

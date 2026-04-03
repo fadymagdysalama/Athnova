@@ -10,23 +10,6 @@ import { useAuthStore } from '../../src/stores/authStore';
 import { useProgramStore } from '../../src/stores/programStore';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 import type { Program } from '../../src/types';
-const DIFFICULTY_COLOR: Record<string, string> = {
-  beginner: colors.success,
-  intermediate: colors.warning,
-  advanced: colors.error,
-};
-
-function DifficultyBadge({ level }: { level: string }) {
-  const { t } = useTranslation();
-  return (
-    <View style={[styles.badge, { backgroundColor: `${DIFFICULTY_COLOR[level] ?? colors.accent}18` }]}>
-      <Text style={[styles.badgeText, { color: DIFFICULTY_COLOR[level] ?? colors.accent }]}>
-        {t(`programs.${level}` as any)}
-      </Text>
-    </View>
-  );
-}
-
 function CoachView() {
   const { t } = useTranslation();
   const router = useRouter();
@@ -96,7 +79,6 @@ function CoachView() {
           >
             <View style={styles.programCardTop}>
               <Text style={styles.programTitle} numberOfLines={1}>{p.title}</Text>
-              <DifficultyBadge level={p.difficulty} />
             </View>
             {!!p.description && (
               <Text style={styles.programDesc} numberOfLines={2}>{p.description}</Text>
@@ -167,10 +149,11 @@ function ClientView() {
           <Text style={styles.emptyHint}>Your coach will assign programs here</Text>
         </View>
       ) : (
-        assignments.map(({ program, current_day, id }) => {
-          const diffColor = DIFFICULTY_COLOR[program.difficulty] ?? colors.accent;
+        assignments.map(({ program, current_day, completed_days_count, id }) => {
+          const diffColor = colors.primary;
+          const completedCount = completed_days_count ?? 0;
           const donePct = Math.min(
-            ((current_day - 1) / Math.max(program.duration_days, 1)) * 100,
+            (completedCount / Math.max(program.duration_days, 1)) * 100,
             100,
           );
           return (
@@ -184,10 +167,9 @@ function ClientView() {
               <View style={[styles.clientCardStrip, { backgroundColor: diffColor }]} />
 
               <View style={styles.clientCardBody}>
-                {/* Title + difficulty badge */}
+                {/* Title */}
                 <View style={styles.programCardTop}>
                   <Text style={styles.programTitle} numberOfLines={1}>{program.title}</Text>
-                  <DifficultyBadge level={program.difficulty} />
                 </View>
 
                 {/* Description */}
@@ -199,7 +181,7 @@ function ClientView() {
                 <View style={styles.clientProgressBlock}>
                   <View style={styles.clientProgressRow}>
                     <Text style={styles.clientProgressLabel}>
-                      Day {current_day} of {program.duration_days}
+                      {completedCount} / {program.duration_days} days
                     </Text>
                     <Text style={[styles.clientProgressPct, { color: diffColor }]}>
                       {Math.round(donePct)}%

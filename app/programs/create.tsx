@@ -11,6 +11,8 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { ExerciseLibraryDrawer } from '../../src/components/ExerciseLibraryDrawer';
+import type { ExerciseTemplate } from '../../src/types';
 
 const SS_COLOR = '#EA580C'; // superset accent – vibrant orange
 const SS_BG = '#FFF7ED';
@@ -22,30 +24,19 @@ import { useProgramStore } from '../../src/stores/programStore';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 import type { ProgramDayWithExercises } from '../../src/types';
 
-type Difficulty = 'beginner' | 'intermediate' | 'advanced';
-
-const DIFF_META: Record<Difficulty, { icon: string; color: string; bg: string }> = {
-  beginner:     { icon: '🌱', color: '#059669', bg: 'rgba(5,150,105,0.10)' },
-  intermediate: { icon: '🔥', color: '#D97706', bg: 'rgba(217,119,6,0.10)' },
-  advanced:     { icon: '⚡', color: '#DC2626', bg: 'rgba(220,38,38,0.10)' },
-};
-
 // ─── Step 1: Program Details ──────────────────────────────────────────────────
 function Step1({
   title, setTitle,
   description, setDescription,
-  difficulty, setDifficulty,
   durationDays, setDurationDays,
   onNext,
 }: {
   title: string; setTitle: (v: string) => void;
   description: string; setDescription: (v: string) => void;
-  difficulty: Difficulty; setDifficulty: (v: Difficulty) => void;
   durationDays: string; setDurationDays: (v: string) => void;
   onNext: () => void;
 }) {
   const { t } = useTranslation();
-  const difficulties: Difficulty[] = ['beginner', 'intermediate', 'advanced'];
   const days = Math.max(1, Math.min(365, parseInt(durationDays, 10) || 7));
 
   const nudgeDays = (delta: number) =>
@@ -77,30 +68,6 @@ function Step1({
           multiline
           numberOfLines={3}
         />
-      </View>
-
-      {/* Difficulty — card selectors */}
-      <View style={styles.fieldGroup}>
-        <Text style={styles.fieldLabel}>{t('programs.difficulty')}</Text>
-        <View style={styles.diffRow}>
-          {difficulties.map((d) => {
-            const meta = DIFF_META[d];
-            const active = difficulty === d;
-            return (
-              <TouchableOpacity
-                key={d}
-                style={[styles.diffCard, active && { borderColor: meta.color, backgroundColor: meta.bg }]}
-                onPress={() => setDifficulty(d)}
-                activeOpacity={0.75}
-              >
-                <Text style={styles.diffIcon}>{meta.icon}</Text>
-                <Text style={[styles.diffLabel, active && { color: meta.color }]}>
-                  {t(`programs.${d}` as any)}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
       </View>
 
       {/* Duration — stepper */}
@@ -154,6 +121,7 @@ interface ExerciseDraft {
   notes: string;
   video_url: string;
   superset_group: number | null;
+  weight: string;
 }
 
 // ─── Superset connector shown between two adjacent exercise rows ──────────────
@@ -260,6 +228,16 @@ function ExerciseRow({
             onChangeText={(v) => onChange('rest_time', v)}
           />
         </View>
+        <View style={[styles.fieldGroup, { flex: 1 }]}>
+          <Text style={styles.miniLabel}>{t('programs.weight')}</Text>
+          <TextInput
+            style={styles.inputMini}
+            placeholder="e.g. 20kg"
+            placeholderTextColor={colors.textMuted}
+            value={ex.weight}
+            onChangeText={(v) => onChange('weight', v)}
+          />
+        </View>
       </View>
       <TextInput
         style={[styles.input, { marginTop: spacing.xs }]}
@@ -295,17 +273,19 @@ function Step2({
 }) {
   const { t } = useTranslation();
   const [expandedDay, setExpandedDay] = useState<string | null>(days[0]?.key ?? null);
+  const [libraryDayKey, setLibraryDayKey] = useState<string | null>(null);
 
-  const addExercise = (dayKey: string) => {
+  const addExercise = (dayKey: string, template?: ExerciseTemplate) => {
     const newEx: ExerciseDraft = {
       key: `${Date.now()}`,
-      exercise_name: '',
-      sets: '3',
-      reps: '10',
+      exercise_name: template?.name ?? '',
+      sets: template?.default_sets ?? '3',
+      reps: template?.default_reps ?? '10',
       rest_time: '60s',
-      notes: '',
-      video_url: '',
+      notes: template?.default_notes ?? '',
+      video_url: template?.video_url ?? '',
       superset_group: null,
+      weight: '',
     };
     setDays(days.map((d) => d.key === dayKey ? { ...d, exercises: [...d.exercises, newEx] } : d));
   };
@@ -406,16 +386,32 @@ function Step2({
                   )}
                 </React.Fragment>
               ))}
-              <TouchableOpacity
-                style={styles.addExBtn}
-                onPress={() => addExercise(day.key)}
-              >
-                <Text style={styles.addExBtnText}>+ {t('programs.addExercise')}</Text>
-              </TouchableOpacity>
+              <View style={styles.addExRow}>
+                <TouchableOpacity
+                  style={[styles.addExBtn, { flex: 1 }]}
+                  onPress={() => addExercise(day.key)}
+                >
+                  <Text style={styles.addExBtnText}>+ {t('programs.addExercise')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.libraryBtn}
+                  onPress={() => setLibraryDayKey(day.key)}
+                >
+                  <Text style={styles.libraryBtnText}>🗂️ {t('library.fromLibrary')}</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           )}
         </View>
       ))}
+
+      <ExerciseLibraryDrawer
+        visible={libraryDayKey !== null}
+        onClose={() => setLibraryDayKey(null)}
+        onSelect={(template) => {
+          if (libraryDayKey) addExercise(libraryDayKey, template);
+        }}
+      />
 
       <TouchableOpacity
         style={[styles.primaryBtn, saving && styles.btnDisabled]}
@@ -444,7 +440,6 @@ export default function CreateProgramScreen() {
   // Step 1 state
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [difficulty, setDifficulty] = useState<Difficulty>('beginner');
   const [durationDays, setDurationDays] = useState('7');
 
   // Step 2 state
@@ -469,7 +464,6 @@ export default function CreateProgramScreen() {
     const { id: programId, error: progErr } = await createProgram({
       title: title.trim(),
       description: description.trim(),
-      difficulty,
       duration_days: count,
       type: 'private',
     });
@@ -496,6 +490,7 @@ export default function CreateProgramScreen() {
           video_url: ex.video_url.trim(),
           order_index: i,
           superset_group: ex.superset_group ?? null,
+          weight: ex.weight.trim() || null,
         });
       }
     }
@@ -527,7 +522,6 @@ export default function CreateProgramScreen() {
         <Step1
           title={title} setTitle={setTitle}
           description={description} setDescription={setDescription}
-          difficulty={difficulty} setDifficulty={setDifficulty}
           durationDays={durationDays} setDurationDays={setDurationDays}
           onNext={handleNext}
         />
@@ -750,16 +744,54 @@ const styles = StyleSheet.create({
   },
   removeExText: { fontSize: 13, color: colors.error, fontWeight: '700' },
 
-  // ── Add exercise button ───────────────────────────────────────────────────────
-  addExBtn: {
+  // ── Weight unit toggle ─────────────────────────────────────────────────────
+  unitToggle: {
+    flexDirection: 'row',
+    borderRadius: borderRadius.sm,
+    overflow: 'hidden',
     borderWidth: 1.5,
-    borderColor: colors.primary,
-    borderStyle: 'dashed',
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    alignItems: 'center',
+    borderColor: colors.border,
   },
-  addExBtnText: { fontSize: fontSize.sm, fontWeight: '700', color: colors.primary },
+  unitBtn: {
+    flex: 1,
+    paddingVertical: 6,
+    alignItems: 'center',
+    backgroundColor: colors.card,
+  },
+  unitBtnActive: { backgroundColor: colors.primary },
+  unitBtnText: { fontSize: fontSize.xs, fontWeight: '700', color: colors.textMuted },
+  unitBtnTextActive: { color: '#fff' },
+
+  // ── Add exercise button + library row ────────────────────────────────────────
+  addExRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  addExBtn: {
+    flex: 1,
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.full,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  addExBtnText: { fontSize: fontSize.sm, fontWeight: '700', color: '#fff' },
+  libraryBtn: {
+    backgroundColor: colors.accentFaded,
+    borderRadius: borderRadius.full,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.accent,
+  },
+  libraryBtnText: { fontSize: fontSize.sm, fontWeight: '700', color: colors.accent },
 
   // ── Superset connector ────────────────────────────────────────────────────────
   ssConnector: {

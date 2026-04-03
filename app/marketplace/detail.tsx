@@ -17,12 +17,6 @@ import { useMarketplaceStore } from '../../src/stores/marketplaceStore';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 import type { PublicProgram, ProgramDayWithExercises } from '../../src/types';
 
-const DIFFICULTY_COLOR: Record<string, string> = {
-  beginner: colors.success,
-  intermediate: colors.warning,
-  advanced: colors.error,
-};
-
 function ExerciseRow({ name, sets, reps, rest }: { name: string; sets: number; reps: string; rest: string | null }) {
   const { t } = useTranslation();
   return (
@@ -138,7 +132,6 @@ export default function MarketplaceDetailScreen() {
     );
   }
 
-  const diffColor = DIFFICULTY_COLOR[program.difficulty] ?? colors.accent;
   const isFree = !program.price || program.price === 0;
 
   return (
@@ -157,11 +150,6 @@ export default function MarketplaceDetailScreen() {
         <View style={styles.summaryCard}>
           <View style={styles.summaryTitleRow}>
             <Text style={styles.summaryTitle}>{program.title}</Text>
-            <View style={[styles.diffBadge, { backgroundColor: `${diffColor}18` }]}>
-              <Text style={[styles.diffText, { color: diffColor }]}>
-                {t(`programs.${program.difficulty}` as any)}
-              </Text>
-            </View>
           </View>
 
           {program.creator && (
@@ -183,13 +171,6 @@ export default function MarketplaceDetailScreen() {
                 {isFree ? 'Free' : `$${program.price!.toFixed(2)}`}
               </Text>
               <Text style={styles.statLabel}>Price</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: diffColor }]}>
-                {t(`programs.${program.difficulty}` as any)}
-              </Text>
-              <Text style={styles.statLabel}>Level</Text>
             </View>
           </View>
         </View>

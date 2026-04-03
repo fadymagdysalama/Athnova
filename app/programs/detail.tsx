@@ -18,12 +18,6 @@ import { useAuthStore } from '../../src/stores/authStore';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 import type { ProgramExercise } from '../../src/types';
 
-const DIFFICULTY_COLOR: Record<string, string> = {
-  beginner: colors.success,
-  intermediate: colors.warning,
-  advanced: colors.error,
-};
-
 const SS_COLOR = '#EA580C';
 const getSupersetLetter = (group: number) =>
   String.fromCharCode(64 + ((group - 1) % 26) + 1);
@@ -90,6 +84,11 @@ function ExerciseCard({
             </Text>
           </View>
         )}
+        {!!ex.weight && (
+          <View style={styles.statChip}>
+            <Text style={styles.statChipText}>{ex.weight}</Text>
+          </View>
+        )}
       </View>
       {!!ex.notes && (
         <Text style={styles.exerciseNotes}>{ex.notes}</Text>
@@ -150,7 +149,7 @@ export default function ProgramDetailScreen() {
     );
   }
 
-  const diffColor = DIFFICULTY_COLOR[currentProgram.difficulty] ?? colors.accent;
+  const diffColor = colors.primary;
 
   const handleMarkComplete = async (dayId: string) => {
     setMarkingDay(dayId);
@@ -213,11 +212,6 @@ export default function ProgramDetailScreen() {
             <Text style={styles.programDesc}>{currentProgram.description}</Text>
           )}
           <View style={styles.metaRow}>
-            <View style={[styles.badge, { backgroundColor: `${diffColor}28` }]}>
-              <Text style={[styles.badgeText, { color: diffColor }]}>
-                {t(`programs.${currentProgram.difficulty}` as any)}
-              </Text>
-            </View>
             <View style={styles.metaDurationPill}>
               <Text style={styles.metaDurationText}>
                 {t('programs.days', { count: currentProgram.duration_days })}

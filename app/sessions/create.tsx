@@ -66,6 +66,8 @@ export default function CreateSessionScreen() {
   const [maxClients, setMaxClients] = useState('');
   const [notes, setNotes] = useState('');
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
+  const [bookingCutoffHours, setBookingCutoffHours] = useState(2);
+  const [cancellationCutoffHours, setCancellationCutoffHours] = useState(2);
 
   // Date picker modal state – start the picker on the pre-selected month
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -302,6 +304,42 @@ export default function CreateSessionScreen() {
               </TouchableOpacity>
             </View>
             <Text style={styles.fieldHint}>{t('schedule.maxClientsHint')}</Text>
+          </View>
+
+          {/* ── Booking Policy ── */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>{t('schedule.bookingCutoff')}</Text>
+            <View style={styles.stepperRow}>
+              <TouchableOpacity style={styles.stepperBtn} onPress={() => setBookingCutoffHours((h) => Math.max(0, h - 1))} activeOpacity={0.8}>
+                <Text style={styles.stepperBtnText}>−</Text>
+              </TouchableOpacity>
+              <View style={styles.stepperValueBox}>
+                <Text style={styles.stepperValue}>{bookingCutoffHours}</Text>
+                <Text style={styles.stepperUnit}>{t('schedule.hoursBeforeStart')}</Text>
+              </View>
+              <TouchableOpacity style={styles.stepperBtn} onPress={() => setBookingCutoffHours((h) => h + 1)} activeOpacity={0.8}>
+                <Text style={styles.stepperBtnText}>+</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.fieldHint}>{t('schedule.bookingCutoffHint')}</Text>
+          </View>
+
+          {/* ── Cancellation Policy ── */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>{t('schedule.cancellationCutoff')}</Text>
+            <View style={styles.stepperRow}>
+              <TouchableOpacity style={styles.stepperBtn} onPress={() => setCancellationCutoffHours((h) => Math.max(0, h - 1))} activeOpacity={0.8}>
+                <Text style={styles.stepperBtnText}>−</Text>
+              </TouchableOpacity>
+              <View style={styles.stepperValueBox}>
+                <Text style={styles.stepperValue}>{cancellationCutoffHours}</Text>
+                <Text style={styles.stepperUnit}>{t('schedule.hoursBeforeStart')}</Text>
+              </View>
+              <TouchableOpacity style={styles.stepperBtn} onPress={() => setCancellationCutoffHours((h) => h + 1)} activeOpacity={0.8}>
+                <Text style={styles.stepperBtnText}>+</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.fieldHint}>{t('schedule.cancellationCutoffHint')}</Text>
           </View>
 
           {/* ── Participants ── */}
