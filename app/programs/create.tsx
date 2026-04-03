@@ -24,6 +24,12 @@ import type { ProgramDayWithExercises } from '../../src/types';
 
 type Difficulty = 'beginner' | 'intermediate' | 'advanced';
 
+const DIFF_META: Record<Difficulty, { icon: string; color: string; bg: string }> = {
+  beginner:     { icon: '🌱', color: '#059669', bg: 'rgba(5,150,105,0.10)' },
+  intermediate: { icon: '🔥', color: '#D97706', bg: 'rgba(217,119,6,0.10)' },
+  advanced:     { icon: '⚡', color: '#DC2626', bg: 'rgba(220,38,38,0.10)' },
+};
+
 // ─── Step 1: Program Details ──────────────────────────────────────────────────
 function Step1({
   title, setTitle,
@@ -40,11 +46,14 @@ function Step1({
 }) {
   const { t } = useTranslation();
   const difficulties: Difficulty[] = ['beginner', 'intermediate', 'advanced'];
+  const days = Math.max(1, Math.min(365, parseInt(durationDays, 10) || 7));
+
+  const nudgeDays = (delta: number) =>
+    setDurationDays(String(Math.max(1, Math.min(365, days + delta))));
 
   return (
     <ScrollView contentContainerStyle={styles.stepContent} keyboardShouldPersistTaps="handled">
-      <Text style={styles.stepLabel}>{t('programs.step1')}</Text>
-
+      {/* Program name */}
       <View style={styles.fieldGroup}>
         <Text style={styles.fieldLabel}>{t('programs.programName')}</Text>
         <TextInput
@@ -56,6 +65,7 @@ function Step1({
         />
       </View>
 
+      {/* Description */}
       <View style={styles.fieldGroup}>
         <Text style={styles.fieldLabel}>{t('programs.description')}</Text>
         <TextInput
@@ -69,42 +79,66 @@ function Step1({
         />
       </View>
 
+      {/* Difficulty — card selectors */}
       <View style={styles.fieldGroup}>
         <Text style={styles.fieldLabel}>{t('programs.difficulty')}</Text>
-        <View style={styles.pillRow}>
-          {difficulties.map((d) => (
+        <View style={styles.diffRow}>
+          {difficulties.map((d) => {
+            const meta = DIFF_META[d];
+            const active = difficulty === d;
+            return (
+              <TouchableOpacity
+                key={d}
+                style={[styles.diffCard, active && { borderColor: meta.color, backgroundColor: meta.bg }]}
+                onPress={() => setDifficulty(d)}
+                activeOpacity={0.75}
+              >
+                <Text style={styles.diffIcon}>{meta.icon}</Text>
+                <Text style={[styles.diffLabel, active && { color: meta.color }]}>
+                  {t(`programs.${d}` as any)}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* Duration — stepper */}
+      <View style={styles.fieldGroup}>
+        <Text style={styles.fieldLabel}>{t('programs.durationDays')}</Text>
+        <View style={styles.stepperRow}>
+          <TouchableOpacity style={styles.stepperBtn} onPress={() => nudgeDays(-1)} activeOpacity={0.75}>
+            <Text style={styles.stepperBtnText}>−</Text>
+          </TouchableOpacity>
+          <View style={styles.stepperValueWrap}>
+            <Text style={styles.stepperValue}>{days}</Text>
+            <Text style={styles.stepperUnit}>days</Text>
+          </View>
+          <TouchableOpacity style={styles.stepperBtn} onPress={() => nudgeDays(1)} activeOpacity={0.75}>
+            <Text style={styles.stepperBtnText}>+</Text>
+          </TouchableOpacity>
+          {/* quick presets */}
+          {[7, 14, 28].map((preset) => (
             <TouchableOpacity
-              key={d}
-              style={[styles.pill, difficulty === d && styles.pillActive]}
-              onPress={() => setDifficulty(d)}
+              key={preset}
+              style={[styles.presetChip, days === preset && styles.presetChipActive]}
+              onPress={() => setDurationDays(String(preset))}
             >
-              <Text style={[styles.pillText, difficulty === d && styles.pillTextActive]}>
-                {t(`programs.${d}` as any)}
+              <Text style={[styles.presetChipText, days === preset && styles.presetChipTextActive]}>
+                {preset}d
               </Text>
             </TouchableOpacity>
           ))}
         </View>
       </View>
 
-      <View style={styles.fieldGroup}>
-        <Text style={styles.fieldLabel}>{t('programs.durationDays')}</Text>
-        <TextInput
-          style={[styles.input, styles.inputSmall]}
-          keyboardType="number-pad"
-          placeholder="7"
-          placeholderTextColor={colors.textMuted}
-          value={durationDays}
-          onChangeText={setDurationDays}
-          maxLength={3}
-        />
-      </View>
-
       <TouchableOpacity
         style={[styles.primaryBtn, !title.trim() && styles.btnDisabled]}
         onPress={onNext}
         disabled={!title.trim()}
+        activeOpacity={0.8}
       >
-        <Text style={styles.primaryBtnText}>{t('common.next')}</Text>
+        <Text style={styles.primaryBtnText}>{t('common.next')} →</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -325,18 +359,20 @@ function Step2({
 
   return (
     <ScrollView contentContainerStyle={styles.stepContent} keyboardShouldPersistTaps="handled">
-      <Text style={styles.stepLabel}>{t('programs.step2')}</Text>
-
       {days.map((day) => (
         <View key={day.key} style={styles.dayCard}>
           <TouchableOpacity
             style={styles.dayHeader}
             onPress={() => setExpandedDay(expandedDay === day.key ? null : day.key)}
           >
+            <View style={styles.dayNumCircle}>
+              <Text style={styles.dayNumText}>{day.day_number}</Text>
+            </View>
             <Text style={styles.dayTitle}>{t('programs.day', { number: day.day_number })}</Text>
             <Text style={styles.dayMeta}>
-              {day.exercises.length} {t('programs.exercises')}  {expandedDay === day.key ? '▲' : '▼'}
+              {day.exercises.length} {t('programs.exercises')}
             </Text>
+            <Text style={styles.dayChevron}>{expandedDay === day.key ? '▲' : '▼'}</Text>
           </TouchableOpacity>
 
           {expandedDay === day.key && (
@@ -472,12 +508,18 @@ export default function CreateProgramScreen() {
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => (step === 1 ? router.back() : setStep(1))}>
-          <Text style={styles.backText}>← {t('common.back')}</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('programs.createProgram')}</Text>
-        <View style={styles.stepIndicator}>
-          <Text style={styles.stepText}>{step}/2</Text>
+        <View style={styles.headerNav}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => (step === 1 ? router.back() : setStep(1))}>
+            <Text style={styles.backBtnText}>←</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>{t('programs.createProgram')}</Text>
+          <View style={styles.stepBadge}>
+            <Text style={styles.stepBadgeText}>{step} / 2</Text>
+          </View>
+        </View>
+        {/* Progress bar */}
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: step === 1 ? '50%' : '100%' }]} />
         </View>
       </View>
 
@@ -504,70 +546,165 @@ export default function CreateProgramScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
+
+  // ── Header ──────────────────────────────────────────────────────────────────
   header: {
-    paddingTop: 60, paddingBottom: spacing.lg, paddingHorizontal: spacing['2xl'],
-    backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingTop: 56,
+    backgroundColor: colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
-  backText: { fontSize: fontSize.md, color: colors.primary, fontWeight: '600' },
-  headerTitle: { fontSize: fontSize.lg, fontWeight: '700', color: colors.text },
-  stepIndicator: {
-    backgroundColor: `${colors.primary}18`, borderRadius: borderRadius.full,
-    paddingHorizontal: spacing.sm, paddingVertical: spacing.xs,
+  headerNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing['2xl'],
+    paddingBottom: spacing.md,
+    gap: spacing.md,
   },
-  stepText: { fontSize: fontSize.sm, fontWeight: '700', color: colors.primary },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.accentFaded,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backBtnText: { fontSize: fontSize.lg, fontWeight: '700', color: colors.primary },
+  headerTitle: { flex: 1, fontSize: fontSize.lg, fontWeight: '800', color: colors.text, letterSpacing: -0.3 },
+  stepBadge: {
+    backgroundColor: colors.accentFaded,
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  stepBadgeText: { fontSize: fontSize.sm, fontWeight: '700', color: colors.primary },
 
-  stepContent: { padding: spacing['2xl'], paddingBottom: 100, gap: spacing.lg },
-  stepLabel: {
-    fontSize: fontSize.sm, fontWeight: '600', color: colors.textMuted,
-    textTransform: 'uppercase', letterSpacing: 0.5,
-  },
+  progressTrack: { height: 4, backgroundColor: colors.borderLight },
+  progressFill: { height: 4, backgroundColor: colors.primary, borderRadius: 2 },
 
-  fieldGroup: { gap: spacing.xs },
-  fieldLabel: { fontSize: fontSize.sm, fontWeight: '600', color: colors.textSecondary },
+  // ── Step content ─────────────────────────────────────────────────────────────
+  stepContent: { padding: spacing['2xl'], paddingBottom: 120, gap: spacing['2xl'] },
+
+  fieldGroup: { gap: spacing.sm },
+  fieldLabel: { fontSize: fontSize.sm, fontWeight: '700', color: colors.text, letterSpacing: 0.1 },
+
   input: {
-    backgroundColor: colors.card, borderRadius: borderRadius.sm,
-    borderWidth: 1, borderColor: colors.border,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    fontSize: fontSize.md, color: colors.text,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    fontSize: fontSize.md,
+    color: colors.text,
   },
-  inputSmall: { width: 100 },
-  textarea: { minHeight: 72, textAlignVertical: 'top' },
+  textarea: { minHeight: 80, textAlignVertical: 'top', paddingTop: spacing.md },
 
-  pillRow: { flexDirection: 'row', gap: spacing.sm },
-  pill: {
-    borderRadius: borderRadius.full, paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card,
+  // ── Difficulty cards ─────────────────────────────────────────────────────────
+  diffRow: { flexDirection: 'row', gap: spacing.sm },
+  diffCard: {
+    flex: 1,
+    borderRadius: borderRadius.lg,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.sm,
+    alignItems: 'center',
+    gap: 6,
   },
-  pillActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  pillText: { fontSize: fontSize.sm, fontWeight: '600', color: colors.textMuted },
-  pillTextActive: { color: colors.textInverse },
+  diffIcon: { fontSize: 24 },
+  diffLabel: { fontSize: fontSize.xs, fontWeight: '700', color: colors.textSecondary, textAlign: 'center' },
 
+  // ── Duration stepper ─────────────────────────────────────────────────────────
+  stepperRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
+  stepperBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperBtnText: { color: '#fff', fontSize: 20, fontWeight: '700', lineHeight: 24 },
+  stepperValueWrap: { alignItems: 'center', minWidth: 56 },
+  stepperValue: { fontSize: fontSize['2xl'], fontWeight: '800', color: colors.text, lineHeight: 30 },
+  stepperUnit: { fontSize: fontSize.xs, color: colors.textMuted, fontWeight: '500' },
+
+  presetChip: {
+    borderRadius: borderRadius.full,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    backgroundColor: colors.surface,
+  },
+  presetChipActive: { borderColor: colors.primary, backgroundColor: colors.accentFaded },
+  presetChipText: { fontSize: fontSize.xs, fontWeight: '700', color: colors.textMuted },
+  presetChipTextActive: { color: colors.primary },
+
+  // ── Primary button ───────────────────────────────────────────────────────────
   primaryBtn: {
-    backgroundColor: colors.primary, borderRadius: borderRadius.md,
-    padding: spacing.lg, alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.lg,
+    padding: spacing.xl,
+    alignItems: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.28,
+    shadowRadius: 10,
+    elevation: 5,
   },
-  btnDisabled: { opacity: 0.4 },
-  primaryBtnText: { fontSize: fontSize.md, fontWeight: '700', color: colors.textInverse },
+  btnDisabled: { opacity: 0.35 },
+  primaryBtnText: { fontSize: fontSize.md, fontWeight: '800', color: colors.textInverse, letterSpacing: 0.3 },
 
-  // Day cards
+  // ── Day cards ────────────────────────────────────────────────────────────────
   dayCard: {
-    backgroundColor: colors.card, borderRadius: borderRadius.md,
-    borderWidth: 1, borderColor: colors.border, overflow: 'hidden',
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
   },
   dayHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    padding: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.lg,
+    gap: spacing.md,
   },
-  dayTitle: { fontSize: fontSize.md, fontWeight: '700', color: colors.text },
+  dayNumCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.accentFaded,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayNumText: { fontSize: fontSize.sm, fontWeight: '800', color: colors.primary },
+  dayTitle: { flex: 1, fontSize: fontSize.md, fontWeight: '700', color: colors.text },
   dayMeta: { fontSize: fontSize.sm, color: colors.textMuted },
-  dayBody: { padding: spacing.md, borderTopWidth: 1, borderTopColor: colors.borderLight, gap: spacing.md },
+  dayChevron: { fontSize: 10, color: colors.textMuted },
+  dayBody: {
+    padding: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+    gap: spacing.md,
+    backgroundColor: colors.background,
+  },
   noExText: { fontSize: fontSize.sm, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.sm },
 
-  // Exercise rows
+  // ── Exercise rows ─────────────────────────────────────────────────────────────
   exerciseRow: {
-    backgroundColor: colors.surface, borderRadius: borderRadius.sm,
-    borderWidth: 1, borderColor: colors.borderLight, overflow: 'hidden',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    overflow: 'hidden',
   },
   exerciseRowSuperset: {
     borderColor: SS_COLOR,
@@ -581,45 +718,72 @@ const styles = StyleSheet.create({
     left: 0,
     bottom: 0,
   },
-  exerciseRowInner: { padding: spacing.sm, gap: spacing.xs },
+  exerciseRowInner: { padding: spacing.md, gap: spacing.sm },
   exerciseRowHeader: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
   ssBadge: {
-    backgroundColor: SS_COLOR, borderRadius: borderRadius.full,
-    paddingHorizontal: spacing.sm, paddingVertical: 2,
+    backgroundColor: SS_COLOR,
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
   },
   ssBadgeText: { fontSize: fontSize.xs, fontWeight: '700', color: '#fff' },
   exerciseMiniRow: { flexDirection: 'row', gap: spacing.sm },
-  miniLabel: { fontSize: fontSize.xs, fontWeight: '600', color: colors.textMuted },
+  miniLabel: { fontSize: fontSize.xs, fontWeight: '700', color: colors.textMuted, marginBottom: 2 },
   inputMini: {
-    backgroundColor: colors.card, borderRadius: borderRadius.sm,
-    borderWidth: 1, borderColor: colors.border,
-    paddingHorizontal: spacing.sm, paddingVertical: spacing.xs,
-    fontSize: fontSize.sm, color: colors.text,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    fontSize: fontSize.sm,
+    color: colors.text,
+    textAlign: 'center',
   },
-  removeExBtn: { padding: spacing.xs },
-  removeExText: { fontSize: fontSize.md, color: colors.textMuted },
-  addExBtn: {
-    borderWidth: 1, borderColor: colors.primaryLight, borderStyle: 'dashed',
-    borderRadius: borderRadius.sm, padding: spacing.sm, alignItems: 'center',
+  removeExBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(220,38,38,0.10)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  addExBtnText: { fontSize: fontSize.sm, fontWeight: '600', color: colors.primaryLight },
+  removeExText: { fontSize: 13, color: colors.error, fontWeight: '700' },
 
-  // Superset connector
+  // ── Add exercise button ───────────────────────────────────────────────────────
+  addExBtn: {
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderStyle: 'dashed',
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    alignItems: 'center',
+  },
+  addExBtnText: { fontSize: fontSize.sm, fontWeight: '700', color: colors.primary },
+
+  // ── Superset connector ────────────────────────────────────────────────────────
   ssConnector: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     paddingVertical: 2,
   },
   ssConnectorLinked: {},
   ssLine: { flex: 1, height: 1, backgroundColor: colors.borderLight },
   ssLineLinked: { backgroundColor: SS_COLOR },
   ssPill: {
-    borderWidth: 1, borderColor: colors.borderLight, borderStyle: 'dashed',
+    borderWidth: 1.5,
+    borderColor: colors.borderLight,
+    borderStyle: 'dashed',
     borderRadius: borderRadius.full,
-    paddingHorizontal: spacing.sm, paddingVertical: 2,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
     backgroundColor: colors.surface,
   },
   ssPillLinked: {
-    backgroundColor: `${SS_COLOR}18`, borderColor: SS_COLOR, borderStyle: 'solid',
+    backgroundColor: `${SS_COLOR}18`,
+    borderColor: SS_COLOR,
+    borderStyle: 'solid',
   },
   ssPillText: { fontSize: fontSize.xs, fontWeight: '500', color: colors.textMuted },
   ssPillTextLinked: { color: SS_COLOR, fontWeight: '700' },

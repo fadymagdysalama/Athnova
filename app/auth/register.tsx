@@ -104,7 +104,7 @@ export default function RegisterScreen() {
               rightIcon={
                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                   <Text style={styles.showPassword}>
-                    {showPassword ? '🙈' : '👁'}
+                    {showPassword ? 'HIDE' : 'SHOW'}
                   </Text>
                 </TouchableOpacity>
               }
@@ -167,26 +167,36 @@ const styles = StyleSheet.create({
   },
   tagline: {
     fontSize: fontSize.md,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     marginTop: spacing.sm,
+    fontWeight: '500',
   },
   form: {
     width: '100%',
   },
   title: {
     fontSize: fontSize['2xl'],
-    fontWeight: '700',
+    fontWeight: '800',
     color: colors.text,
     marginBottom: spacing['3xl'],
+    letterSpacing: -0.5,
   },
   showPassword: {
-    fontSize: 18,
+    fontSize: 16,
+    color: colors.textMuted,
+    fontWeight: '600',
+    paddingHorizontal: 4,
   },
   error: {
     color: colors.error,
     fontSize: fontSize.sm,
     textAlign: 'center',
     marginBottom: spacing.lg,
+    backgroundColor: colors.errorFaded,
+    borderRadius: 8,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    overflow: 'hidden',
   },
   button: {
     marginTop: spacing.sm,
@@ -201,8 +211,8 @@ const styles = StyleSheet.create({
     fontSize: fontSize.md,
   },
   footerLink: {
-    color: colors.primary,
+    color: colors.accent,
     fontSize: fontSize.md,
-    fontWeight: '600',
+    fontWeight: '700',
   },
 });

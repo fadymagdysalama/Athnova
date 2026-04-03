@@ -47,6 +47,12 @@ function statusColor(status: string): string {
   return colors.primary;
 }
 
+function statusFaded(status: string): string {
+  if (status === 'cancelled') return colors.errorFaded;
+  if (status === 'completed') return colors.successFaded;
+  return colors.accentFaded;
+}
+
 // ─── Booked Session Card ──────────────────────────────────────────────────────
 
 function SessionCard({
@@ -82,67 +88,78 @@ function SessionCard({
   const showDeleteBtn = isCoach && onDelete && session.status === 'cancelled';
 
   return (
-    <View style={styles.sessionCard}>
-      <TouchableOpacity style={styles.sessionCardInner} onPress={onPress} activeOpacity={0.8}>
-        <View style={[styles.timeStripe, { backgroundColor: sColor }]} />
-        <View style={styles.cardBody}>
-          <View style={styles.cardRow}>
-            <Text style={styles.cardTime}>{formatTime(session.start_time)}</Text>
-            {/* Capacity shown only to coach */}
-            {isCoach && session.max_clients != null && (
-              <View style={styles.capacityTag}>
-                <Text style={styles.capacityTagText}>
-                  {session.clients.length}/{session.max_clients}
-                </Text>
-              </View>
-            )}
-            {showStatusBadge && (
-              <View style={[styles.statusBadge, { backgroundColor: sColor + '18' }]}>
-                <Text style={[styles.statusText, { color: sColor }]}>
-                  {t(`schedule.${session.status}` as any)}
-                </Text>
-              </View>
-            )}
-            {showDeleteBtn && (
-              <TouchableOpacity
-                style={[styles.inlineDeleteBtn, deleting && styles.bookBtnDisabled]}
-                onPress={onDelete}
-                disabled={deleting}
-                activeOpacity={0.8}
-              >
-                {deleting ? (
-                  <ActivityIndicator size="small" color={colors.textInverse} />
-                ) : (
-                  <Text style={styles.inlineDeleteText}>{t('common.delete')}</Text>
-                )}
-              </TouchableOpacity>
-            )}
-          </View>
-          <Text style={styles.cardMeta}>{t('schedule.min', { count: session.duration_minutes })}</Text>
-          {isCoach && subtitle ? (
-            <Text style={styles.cardParticipants} numberOfLines={1}>{subtitle}</Text>
-          ) : null}
-          {session.notes ? (
-            <Text style={styles.cardNotes} numberOfLines={1}>{session.notes}</Text>
-          ) : null}
-        </View>
-      </TouchableOpacity>
+    <TouchableOpacity
+      style={styles.sessionCard}
+      onPress={onPress}
+      activeOpacity={0.8}
+    >
+      {/* Left status stripe */}
+      <View style={[styles.timeStripe, { backgroundColor: sColor }]} />
 
-      {showCancelBtn && (
-        <TouchableOpacity
-          style={[styles.bookBtn, { backgroundColor: colors.error }, canceling && styles.bookBtnDisabled]}
-          onPress={onCancel}
-          disabled={canceling}
-          activeOpacity={0.8}
-        >
-          {canceling ? (
-            <ActivityIndicator size="small" color={colors.textInverse} />
-          ) : (
-            <Text style={styles.bookBtnText}>{t('common.cancel')}</Text>
+      {/* Card content */}
+      <View style={styles.cardBody}>
+        {/* Row 1: time + status badge */}
+        <View style={styles.cardTopRow}>
+          <Text style={styles.cardTime}>{formatTime(session.start_time)}</Text>
+          {showStatusBadge && (
+            <View style={[styles.statusBadge, { backgroundColor: statusFaded(session.status) }]}>
+              <Text style={[styles.statusText, { color: sColor }]}>{t(`schedule.${session.status}` as any)}</Text>
+            </View>
           )}
-        </TouchableOpacity>
-      )}
-    </View>
+        </View>
+
+        {/* Row 2: duration */}
+        <Text style={styles.cardMeta}>{t('schedule.min', { count: session.duration_minutes })}</Text>
+
+        {/* Row 3: participants (coach view) */}
+        {isCoach && subtitle ? (
+          <Text style={styles.cardParticipants} numberOfLines={1}>{subtitle}</Text>
+        ) : null}
+
+        {/* Row 4: notes */}
+        {session.notes ? (
+          <Text style={styles.cardNotes} numberOfLines={1}>{session.notes}</Text>
+        ) : null}
+
+        {/* Row 5: capacity + action */}
+        <View style={styles.cardBottomRow}>
+          {isCoach && session.max_clients != null && (
+            <View style={styles.capacityTag}>
+              <Text style={styles.capacityTagText}>{session.clients.length}/{session.max_clients} clients</Text>
+            </View>
+          )}
+          <View style={{ flex: 1 }} />
+          {showCancelBtn && (
+            <TouchableOpacity
+              style={[styles.cardActionBtn, canceling && { opacity: 0.55 }]}
+              onPress={onCancel}
+              disabled={canceling}
+              activeOpacity={0.8}
+            >
+              {canceling ? (
+                <ActivityIndicator size="small" color={colors.error} />
+              ) : (
+                <Text style={[styles.cardActionBtnText, { color: colors.error }]}>{t('common.cancel')}</Text>
+              )}
+            </TouchableOpacity>
+          )}
+          {showDeleteBtn && (
+            <TouchableOpacity
+              style={[styles.cardActionBtn, deleting && { opacity: 0.55 }]}
+              onPress={onDelete}
+              disabled={deleting}
+              activeOpacity={0.8}
+            >
+              {deleting ? (
+                <ActivityIndicator size="small" color={colors.error} />
+              ) : (
+                <Text style={[styles.cardActionBtnText, { color: colors.error }]}>{t('common.delete')}</Text>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -162,24 +179,29 @@ function BookableCard({
     <View style={styles.bookableCard}>
       <View style={[styles.timeStripe, { backgroundColor: colors.accent }]} />
       <View style={styles.cardBody}>
-        <Text style={styles.cardTime}>{formatTime(session.start_time)}</Text>
+        <View style={styles.cardTopRow}>
+          <Text style={[styles.cardTime, { color: colors.accent }]}>{formatTime(session.start_time)}</Text>
+        </View>
         <Text style={styles.cardMeta}>{t('schedule.min', { count: session.duration_minutes })}</Text>
         {session.notes ? (
           <Text style={styles.cardNotes} numberOfLines={1}>{session.notes}</Text>
         ) : null}
+        <View style={styles.cardBottomRow}>
+          <View style={{ flex: 1 }} />
+          <TouchableOpacity
+            style={[styles.bookBtn, booking && styles.bookBtnDisabled]}
+            onPress={onBook}
+            disabled={booking}
+            activeOpacity={0.8}
+          >
+            {booking ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.bookBtnText}>{t('schedule.book')}</Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
-      <TouchableOpacity
-        style={[styles.bookBtn, booking && styles.bookBtnDisabled]}
-        onPress={onBook}
-        disabled={booking}
-        activeOpacity={0.8}
-      >
-        {booking ? (
-          <ActivityIndicator size="small" color={colors.textInverse} />
-        ) : (
-          <Text style={styles.bookBtnText}>{t('schedule.book')}</Text>
-        )}
-      </TouchableOpacity>
     </View>
   );
 }
@@ -351,7 +373,7 @@ export default function ScheduleScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
         }
       >
         {/* ── Calendar ── */}
@@ -369,11 +391,16 @@ export default function ScheduleScreen() {
 
         {/* ── Day section ── */}
         <View style={styles.daySection}>
-          <Text style={styles.dayLabel}>
-            {selectedDate === todayStr
-              ? t('schedule.today')
-              : formatDisplayDate(selectedDate)}
-          </Text>
+          <View style={styles.dayLabelRow}>
+            <Text style={styles.dayLabel}>
+              {selectedDate === todayStr ? t('schedule.today') : formatDisplayDate(selectedDate)}
+            </Text>
+            {selectedDate === todayStr && (
+              <View style={styles.todayBadge}>
+                <Text style={styles.todayBadgeText}>Today</Text>
+              </View>
+            )}
+          </View>
 
           {isLoading && !refreshing ? (
             <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: spacing['2xl'] }} />
@@ -404,7 +431,6 @@ export default function ScheduleScreen() {
                 ))
               )}
 
-              {/* Available to book (clients only, hidden when empty) */}
               {!isCoach && dayAvailable.length > 0 && (
                 <View style={styles.availableSection}>
                   <Text style={styles.availableLabel}>{t('schedule.availableToBook')}</Text>
@@ -429,12 +455,9 @@ export default function ScheduleScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
+  container: { flex: 1, backgroundColor: colors.background },
 
-  // Header
+  // ── Header ──────────────────────────────────────────────────────────────────
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -445,184 +468,150 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: fontSize['2xl'],
-    fontWeight: '700',
+    fontWeight: '800',
     color: colors.text,
+    letterSpacing: -0.5,
   },
   addBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.28,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  addBtnText: {
-    color: colors.textInverse,
-    fontSize: fontSize.lg,
-    fontWeight: '700',
-    lineHeight: 22,
-  },
+  addBtnText: { color: '#fff', fontSize: fontSize.xl, fontWeight: '300', lineHeight: 24 },
 
-  // Scroll
-  scrollContent: {
-    paddingBottom: spacing['4xl'],
-  },
+  // ── Scroll & calendar ───────────────────────────────────────────────────────
+  scrollContent: { paddingBottom: spacing['4xl'] },
   calendarWrapper: {
     marginHorizontal: spacing['2xl'],
     marginBottom: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.xl,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.07,
+    shadowRadius: 10,
+    elevation: 3,
   },
 
-  // Day section
-  daySection: {
-    paddingHorizontal: spacing['2xl'],
-  },
-  dayLabel: {
-    fontSize: fontSize.md,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: spacing.md,
-  },
-
-  // Empty state
-  emptyCard: {
-    backgroundColor: colors.card,
-    borderRadius: borderRadius.md,
-    padding: spacing['2xl'],
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-  },
-  emptyText: {
-    fontSize: fontSize.sm,
-    color: colors.textSecondary,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  emptySubtext: {
-    fontSize: fontSize.xs,
-    color: colors.textMuted,
-    marginTop: spacing.xs,
-    textAlign: 'center',
-  },
-
-  // Booked session card
-  sessionCard: {
+  // ── Day label ────────────────────────────────────────────────────────────────
+  daySection: { paddingHorizontal: spacing['2xl'] },
+  dayLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.card,
-    borderRadius: borderRadius.md,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  dayLabel: { fontSize: fontSize.md, fontWeight: '800', color: colors.text, letterSpacing: -0.2 },
+  todayBadge: {
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  todayBadgeText: { fontSize: fontSize.xs, fontWeight: '700', color: '#fff' },
+
+  // ── Empty state ──────────────────────────────────────────────────────────────
+  emptyCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.xl,
+    padding: spacing['2xl'],
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+  },
+  emptyText: { fontSize: fontSize.sm, color: colors.textSecondary, fontWeight: '600', textAlign: 'center' },
+  emptySubtext: { fontSize: fontSize.xs, color: colors.textMuted, marginTop: spacing.xs, textAlign: 'center' },
+
+  // ── Session card ─────────────────────────────────────────────────────────────
+  sessionCard: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.xl,
     marginBottom: spacing.sm,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: colors.borderLight,
+    borderColor: colors.border,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  sessionCardInner: {
-    flex: 1,
-    flexDirection: 'row',
-  },
-  timeStripe: {
-    width: 4,
-  },
-  cardBody: {
-    flex: 1,
-    padding: spacing.md,
-  },
-  cardRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    marginBottom: 2,
-  },
-  cardTime: {
-    fontSize: fontSize.md,
-    fontWeight: '700',
-    color: colors.text,
-    flex: 1,
-  },
-  capacityTag: {
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: borderRadius.sm,
-    backgroundColor: colors.borderLight,
-  },
-  capacityTagText: {
-    fontSize: fontSize.xs,
-    fontWeight: '600',
-    color: colors.textMuted,
-  },
-  statusBadge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: borderRadius.sm,
-  },
-  statusText: {
-    fontSize: fontSize.xs,
-    fontWeight: '600',
-  },
-  inlineDeleteBtn: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: borderRadius.sm,
-    backgroundColor: colors.error,
-  },
-  inlineDeleteText: {
-    fontSize: fontSize.xs,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  cardMeta: {
-    fontSize: fontSize.xs,
-    color: colors.textMuted,
-    marginBottom: 4,
-  },
-  cardParticipants: {
-    fontSize: fontSize.sm,
-    color: colors.textSecondary,
-  },
-  cardNotes: {
-    fontSize: fontSize.xs,
-    color: colors.textMuted,
-    marginTop: 2,
-    fontStyle: 'italic',
-  },
+  sessionCardInner: { flex: 1, flexDirection: 'row' },
+  timeStripe: { width: 4 },
 
-  // Available to book section
-  availableSection: {
-    marginTop: spacing.lg,
+  cardBody: { flex: 1, padding: spacing.md, paddingLeft: spacing.lg },
+  cardTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
+  cardTime: { fontSize: fontSize.lg, fontWeight: '800', color: colors.text, letterSpacing: -0.3 },
+  cardMeta: { fontSize: fontSize.xs, color: colors.textMuted, fontWeight: '500', marginBottom: spacing.xs },
+  cardParticipants: { fontSize: fontSize.sm, color: colors.textSecondary, fontWeight: '600', marginBottom: 2 },
+  cardNotes: { fontSize: fontSize.xs, color: colors.textMuted, fontStyle: 'italic', marginBottom: spacing.xs },
+  cardBottomRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.xs },
+  capacityTag: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.surfaceLight,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
+  capacityTagText: { fontSize: fontSize.xs, fontWeight: '700', color: colors.textMuted },
+  statusBadge: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: borderRadius.full },
+  statusText: { fontSize: fontSize.xs, fontWeight: '700' },
+  cardActionBtn: { paddingHorizontal: spacing.sm, paddingVertical: 4 },
+  cardActionBtnText: { fontSize: fontSize.xs, fontWeight: '700' },
+
+  // ── Bookable card ─────────────────────────────────────────────────────────────
+  availableSection: { marginTop: spacing.lg },
   availableLabel: {
     fontSize: fontSize.xs,
     fontWeight: '700',
     color: colors.textMuted,
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    letterSpacing: 1,
     marginBottom: spacing.md,
   },
   bookableCard: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.card,
-    borderRadius: borderRadius.md,
+    alignItems: 'stretch',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.xl,
     marginBottom: spacing.sm,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: colors.accent + '40',
+    borderColor: colors.border,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
   bookBtn: {
-    backgroundColor: colors.accent,
-    paddingHorizontal: spacing.md,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    margin: spacing.sm,
-    borderRadius: borderRadius.sm,
+    borderRadius: borderRadius.lg,
     alignItems: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 4,
+    minWidth: 76,
   },
-  bookBtnDisabled: { opacity: 0.6 },
-  bookBtnText: {
-    color: colors.textInverse,
-    fontSize: fontSize.sm,
-    fontWeight: '700',
-  },
-
-  // (Cancel button reuses bookBtn/bookBtnText styles — no extra styles needed)
+  bookBtnDisabled: { opacity: 0.55 },
+  bookBtnText: { color: '#fff', fontSize: fontSize.sm, fontWeight: '800' },
 });
-

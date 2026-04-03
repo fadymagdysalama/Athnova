@@ -10,6 +10,7 @@ import {
   Linking,
   TextInput,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useProgramStore } from '../../src/stores/programStore';
@@ -177,72 +178,75 @@ export default function ProgramDetailScreen() {
   };
 
   return (
-    <View style={styles.root}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backText}>← {t('common.back')}</Text>
+    <SafeAreaView style={styles.root} edges={['top']}>
+      {/* Navbar */}
+      <View style={styles.navbar}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
+          <Text style={styles.backIcon}>‹</Text>
         </TouchableOpacity>
-        <View style={styles.headerActions}>
+        <Text style={styles.navTitle} numberOfLines={1}>{currentProgram.title}</Text>
+        <View style={styles.navActions}>
           {isCoach && (
             <TouchableOpacity
-              style={styles.editHeaderBtn}
+              style={styles.navActionBtn}
               onPress={() => router.push({ pathname: '/programs/edit', params: { id: currentProgram.id } })}
             >
-              <Text style={styles.editHeaderBtnText}>{t('programs.editProgram')}</Text>
+              <Text style={styles.navActionText}>{t('programs.editProgram')}</Text>
             </TouchableOpacity>
           )}
           {isCoach && (
             <TouchableOpacity
-              style={styles.assignHeaderBtn}
+              style={[styles.navActionBtn, styles.navActionBtnPrimary]}
               onPress={() => router.push({ pathname: '/programs/assign', params: { id: currentProgram.id } })}
             >
-              <Text style={styles.assignHeaderBtnText}>{t('programs.assignToClient')}</Text>
+              <Text style={[styles.navActionText, styles.navActionTextPrimary]}>{t('programs.assignToClient')}</Text>
             </TouchableOpacity>
           )}
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* Program info card */}
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Hero info card */}
         <View style={styles.infoCard}>
           <Text style={styles.programTitle}>{currentProgram.title}</Text>
           {!!currentProgram.description && (
             <Text style={styles.programDesc}>{currentProgram.description}</Text>
           )}
           <View style={styles.metaRow}>
-            <View style={[styles.badge, { backgroundColor: `${diffColor}18` }]}>
+            <View style={[styles.badge, { backgroundColor: `${diffColor}28` }]}>
               <Text style={[styles.badgeText, { color: diffColor }]}>
                 {t(`programs.${currentProgram.difficulty}` as any)}
               </Text>
             </View>
-            <Text style={styles.metaText}>
-              {t('programs.days', { count: currentProgram.duration_days })}
-            </Text>
+            <View style={styles.metaDurationPill}>
+              <Text style={styles.metaDurationText}>
+                {t('programs.days', { count: currentProgram.duration_days })}
+              </Text>
+            </View>
           </View>
         </View>
 
         {/* Days */}
         <Text style={styles.sectionTitle}>{t('programs.step2')}</Text>
-        {currentProgram.days.map((day) => (
-          <View key={day.id} style={styles.dayCard}>
+        {currentProgram.days.map((day) => {
+          const isDone = !isCoach && completedDayIds.has(day.id);
+          return (
+          <View key={day.id} style={[styles.dayCard, isDone && styles.dayCardDone]}>
             <TouchableOpacity
               style={styles.dayHeader}
               onPress={() => setExpandedDay(expandedDay === day.id ? null : day.id)}
+              activeOpacity={0.8}
             >
-              <Text style={styles.dayTitle}>
-                {t('programs.day', { number: day.day_number })}
-              </Text>
-              <View style={styles.dayHeaderRight}>
-                {!isCoach && completedDayIds.has(day.id) && (
-                  <View style={styles.completedBadge}>
-                    <Text style={styles.completedBadgeText}>✓ {t('programs.completed')}</Text>
-                  </View>
-                )}
-                <Text style={styles.dayMeta}>
-                  {day.exercises.length} {t('programs.exercises')}  {expandedDay === day.id ? '▲' : '▼'}
+              <View style={[styles.dayNumberBadge, isDone && styles.dayNumberBadgeDone]}>
+                <Text style={[styles.dayNumberText, isDone && styles.dayNumberTextDone]}>
+                  {isDone ? '✓' : day.day_number}
                 </Text>
               </View>
+              <View style={styles.dayHeaderCenter}>
+                <Text style={styles.dayTitle}>{t('programs.day', { number: day.day_number })}</Text>
+                <Text style={styles.daySubtitle}>{day.exercises.length} {t('programs.exercises')}</Text>
+              </View>
+              <Text style={styles.dayChevron}>{expandedDay === day.id ? '▲' : '▼'}</Text>
             </TouchableOpacity>
 
             {expandedDay === day.id && (
@@ -287,7 +291,7 @@ export default function ProgramDetailScreen() {
                       completedDayIds.has(day.id) && styles.markCompleteBtnDone,
                     ]}
                     onPress={() => !completedDayIds.has(day.id) && handleMarkComplete(day.id)}
-                    activeOpacity={completedDayIds.has(day.id) ? 1 : 0.7}
+                    activeOpacity={completedDayIds.has(day.id) ? 1 : 0.8}
                     disabled={markingDay === day.id}
                   >
                     {markingDay === day.id ? (
@@ -360,63 +364,129 @@ export default function ProgramDetailScreen() {
               </View>
             )}
           </View>
-        ))}
+          );
+        })}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
-  header: {
-    paddingTop: 60, paddingBottom: spacing.lg, paddingHorizontal: spacing['2xl'],
-    backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+
+  // ── Navbar ────────────────────────────────────────────────────────────────
+  navbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing['2xl'],
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+    gap: spacing.md,
+    backgroundColor: colors.background,
   },
-  backText: { fontSize: fontSize.md, color: colors.primary, fontWeight: '600' },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  editHeaderBtn: {
-    borderWidth: 1, borderColor: colors.primary, borderRadius: borderRadius.sm,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.accentFaded,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
-  editHeaderBtnText: { fontSize: fontSize.sm, fontWeight: '600', color: colors.primary },
-  assignHeaderBtn: {
-    backgroundColor: colors.primary, borderRadius: borderRadius.sm,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
+  backIcon: { fontSize: 26, color: colors.primary, fontWeight: '600', lineHeight: 30, marginLeft: -2 },
+  navTitle: { flex: 1, fontSize: fontSize.md, fontWeight: '800', color: colors.text, letterSpacing: -0.2 },
+  navActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  navActionBtn: {
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
   },
-  assignHeaderBtnText: { fontSize: fontSize.sm, fontWeight: '700', color: colors.textInverse },
+  navActionBtnPrimary: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  navActionText: { fontSize: fontSize.xs, fontWeight: '700', color: colors.textSecondary },
+  navActionTextPrimary: { color: '#fff' },
+
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content: { padding: spacing['2xl'], paddingBottom: 80, gap: spacing.md },
 
-  // Info card
+  // ── Hero info card ─────────────────────────────────────────────────────────
   infoCard: {
-    backgroundColor: colors.card, borderRadius: borderRadius.lg,
-    padding: spacing.lg, gap: spacing.sm,
-    borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.xl,
+    padding: spacing.xl,
+    gap: spacing.sm,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 14,
+    elevation: 6,
   },
-  programTitle: { fontSize: fontSize.xl, fontWeight: '700', color: colors.text },
-  programDesc: { fontSize: fontSize.sm, color: colors.textMuted, lineHeight: 20 },
+  programTitle: { fontSize: fontSize.xl, fontWeight: '800', color: '#fff', letterSpacing: -0.3 },
+  programDesc: { fontSize: fontSize.sm, color: 'rgba(255,255,255,0.72)', lineHeight: 20 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xs },
-  metaText: { fontSize: fontSize.sm, color: colors.textMuted },
-  badge: { borderRadius: borderRadius.full, paddingHorizontal: spacing.sm, paddingVertical: 2 },
-  badgeText: { fontSize: fontSize.xs, fontWeight: '600' },
+  metaText: { fontSize: fontSize.sm, color: 'rgba(255,255,255,0.65)' },
+  metaDurationPill: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 3,
+  },
+  metaDurationText: { fontSize: fontSize.xs, color: '#fff', fontWeight: '700' },
+  badge: { borderRadius: borderRadius.full, paddingHorizontal: spacing.sm, paddingVertical: 3 },
+  badgeText: { fontSize: fontSize.xs, fontWeight: '700', textTransform: 'capitalize' },
 
-  // Section
+  // ── Section title ───────────────────────────────────────────────────────────
   sectionTitle: {
-    fontSize: fontSize.sm, fontWeight: '600', color: colors.textMuted,
-    textTransform: 'uppercase', letterSpacing: 0.5,
+    fontSize: fontSize.xs,
+    fontWeight: '700',
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: -spacing.xs,
   },
 
-  // Day card
+  // ── Day card ────────────────────────────────────────────────────────────────
   dayCard: {
-    backgroundColor: colors.card, borderRadius: borderRadius.md,
-    borderWidth: 1, borderColor: colors.border, overflow: 'hidden',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.xl,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
+  dayCardDone: { borderColor: colors.success },
   dayHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    padding: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.lg,
+    gap: spacing.md,
   },
-  dayTitle: { fontSize: fontSize.md, fontWeight: '700', color: colors.text },
+  dayNumberBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.accentFaded,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  dayNumberBadgeDone: { backgroundColor: colors.success },
+  dayNumberText: { fontSize: fontSize.sm, fontWeight: '800', color: colors.accent },
+  dayNumberTextDone: { color: '#fff' },
+  dayHeaderCenter: { flex: 1 },
+  dayTitle: { fontSize: fontSize.md, fontWeight: '800', color: colors.text, letterSpacing: -0.2 },
+  daySubtitle: { fontSize: fontSize.xs, color: colors.textMuted, fontWeight: '500', marginTop: 1 },
+  dayChevron: { fontSize: fontSize.xs, color: colors.textMuted },
+
+  // kept for old refs:
   dayHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   dayMeta: { fontSize: fontSize.sm, color: colors.textMuted },
   completedBadge: {
@@ -426,99 +496,138 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   completedBadgeText: { fontSize: fontSize.xs, fontWeight: '700', color: colors.success },
-  dayBody: { padding: spacing.md, borderTopWidth: 1, borderTopColor: colors.borderLight, gap: spacing.sm },
+
+  dayBody: {
+    padding: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+    gap: spacing.sm,
+    backgroundColor: colors.background,
+  },
   noExText: { fontSize: fontSize.sm, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.sm },
 
-  // Mark complete button
+  // ── Mark complete button ─────────────────────────────────────────────────
   markCompleteBtn: {
-    marginTop: spacing.sm,
+    marginTop: spacing.xs,
     backgroundColor: colors.primary,
-    borderRadius: borderRadius.md,
-    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full,
+    paddingVertical: spacing.md,
     alignItems: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
   markCompleteBtnDone: {
-    backgroundColor: `${colors.success}18`,
-    borderWidth: 1,
+    backgroundColor: colors.successFaded,
+    borderWidth: 1.5,
     borderColor: colors.success,
+    shadowOpacity: 0,
+    elevation: 0,
   },
-  markCompleteBtnText: { fontSize: fontSize.sm, fontWeight: '700', color: '#ffffff' },
+  markCompleteBtnText: { fontSize: fontSize.sm, fontWeight: '800', color: '#fff' },
   markCompleteBtnTextDone: { color: colors.success },
 
-  // Exercise card
+  // ── Exercise card ──────────────────────────────────────────────────────────
   exerciseCard: {
-    backgroundColor: colors.surface, borderRadius: borderRadius.sm,
-    padding: spacing.sm, gap: spacing.xs,
-    borderWidth: 1, borderColor: colors.borderLight,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   exerciseTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   exerciseIndex: {
-    width: 24, height: 24, borderRadius: 12,
-    backgroundColor: `${colors.primary}18`, alignItems: 'center', justifyContent: 'center',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
-  exerciseIndexText: { fontSize: fontSize.xs, fontWeight: '700', color: colors.primary },
-  exerciseName: { flex: 1, fontSize: fontSize.md, fontWeight: '600', color: colors.text },
+  exerciseIndexText: { fontSize: fontSize.xs, fontWeight: '800', color: '#fff' },
+  exerciseName: { flex: 1, fontSize: fontSize.md, fontWeight: '700', color: colors.text },
   exerciseMeta: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
   statChip: {
-    backgroundColor: colors.card, borderRadius: borderRadius.full,
-    paddingHorizontal: spacing.sm, paddingVertical: 2,
-    borderWidth: 1, borderColor: colors.borderLight,
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  statChipText: { fontSize: fontSize.xs, color: colors.textSecondary, fontWeight: '500' },
+  statChipText: { fontSize: fontSize.xs, color: colors.textSecondary, fontWeight: '600' },
   exerciseNotes: { fontSize: fontSize.xs, color: colors.textMuted, fontStyle: 'italic' },
   videoLink: {
     marginTop: spacing.xs,
-    backgroundColor: `${colors.error}10`,
-    borderRadius: borderRadius.sm,
-    paddingHorizontal: spacing.sm,
+    backgroundColor: '#FFF1F0',
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     alignSelf: 'flex-start',
     borderWidth: 1,
-    borderColor: `${colors.error}30`,
+    borderColor: '#FECACA',
   },
-  videoLinkText: { fontSize: fontSize.xs, fontWeight: '700', color: '#CC0000' },
+  videoLinkText: { fontSize: fontSize.xs, fontWeight: '700', color: '#DC2626' },
 
-  // Client feedback
+  // ── Client feedback ───────────────────────────────────────────────────────
   feedbackSection: {
     marginTop: spacing.sm,
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,
-    paddingTop: spacing.sm,
-    gap: spacing.xs,
+    paddingTop: spacing.md,
+    gap: spacing.sm,
   },
   feedbackSectionTitle: {
     fontSize: fontSize.xs,
     color: colors.textMuted,
-    fontWeight: '600',
+    fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 1,
   },
   feedbackCard: {
-    backgroundColor: `${colors.primary}08`,
-    borderRadius: borderRadius.sm,
-    padding: spacing.sm,
+    backgroundColor: colors.accentFaded,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
     borderWidth: 1,
-    borderColor: `${colors.primary}20`,
+    borderColor: colors.border,
     gap: spacing.xs,
   },
   feedbackText: {
     fontSize: fontSize.sm,
     color: colors.text,
     fontStyle: 'italic',
-    lineHeight: 18,
+    lineHeight: 20,
   },
-  feedbackEditText: { fontSize: fontSize.xs, color: colors.primary, fontWeight: '600' },
-  feedbackAddBtn: { paddingVertical: spacing.xs },
-  feedbackAddText: { fontSize: fontSize.sm, color: colors.primary, fontWeight: '500' },
-  feedbackInput: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.sm,
-    padding: spacing.sm,
+  feedbackEditText: { fontSize: fontSize.xs, color: colors.accent, fontWeight: '700' },
+  feedbackAddBtn: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.lg,
+    backgroundColor: colors.accentFaded,
     borderWidth: 1,
     borderColor: colors.border,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+  },
+  feedbackAddText: { fontSize: fontSize.sm, color: colors.accent, fontWeight: '700' },
+  feedbackInput: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    borderWidth: 1.5,
+    borderColor: colors.accent,
     fontSize: fontSize.sm,
     color: colors.text,
-    minHeight: 80,
+    minHeight: 88,
     textAlignVertical: 'top',
   },
   feedbackActions: {
@@ -528,21 +637,35 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   feedbackCancelBtn: {
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-    borderRadius: borderRadius.sm,
-    borderWidth: 1,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borderRadius.full,
+    borderWidth: 1.5,
     borderColor: colors.border,
   },
-  feedbackCancelText: { fontSize: fontSize.sm, color: colors.textSecondary },
+  feedbackCancelText: { fontSize: fontSize.sm, color: colors.textSecondary, fontWeight: '600' },
   feedbackSaveBtn: {
     backgroundColor: colors.primary,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-    borderRadius: borderRadius.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borderRadius.full,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
   },
-  feedbackSaveBtnDisabled: { opacity: 0.6 },
-  feedbackSaveText: { fontSize: fontSize.sm, color: '#fff', fontWeight: '600' },
+  feedbackSaveBtnDisabled: { opacity: 0.55 },
+  feedbackSaveText: { fontSize: fontSize.sm, color: '#fff', fontWeight: '700' },
+
+  // legacy refs kept for coach header actions
+  header: {},
+  backText: {},
+  headerActions: {},
+  editHeaderBtn: {},
+  editHeaderBtnText: {},
+  assignHeaderBtn: {},
+  assignHeaderBtnText: {},
 });
 
 // Superset-specific styles for the detail view

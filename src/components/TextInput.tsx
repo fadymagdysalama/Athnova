@@ -71,8 +71,9 @@ const styles = StyleSheet.create({
   label: {
     color: colors.textSecondary,
     fontSize: fontSize.sm,
-    fontWeight: '500',
+    fontWeight: '600',
     marginBottom: spacing.sm,
+    letterSpacing: 0.1,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -83,10 +84,12 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   inputFocused: {
-    borderColor: colors.primary,
+    borderColor: colors.accent,
+    backgroundColor: colors.surface,
   },
   inputError: {
     borderColor: colors.error,
+    backgroundColor: colors.errorFaded,
   },
   icon: {
     paddingLeft: spacing.lg,
@@ -98,7 +101,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: colors.text,
     fontSize: fontSize.md,
-    paddingVertical: spacing.md + 2,
+    paddingVertical: spacing.md + 3,
     paddingHorizontal: spacing.lg,
   },
   inputWithIcon: {

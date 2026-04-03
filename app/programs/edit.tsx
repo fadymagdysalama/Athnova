@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Alert, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const SS_COLOR = '#EA580C';
 const SS_BG = '#FFF7ED';
@@ -266,28 +267,31 @@ export default function EditProgramScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backText}>← {t('common.back')}</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('programs.editProgram')}</Text>
-        <TouchableOpacity
-          style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
-          onPress={handleSave}
-          disabled={saving}
-        >
-          {saving
-            ? <ActivityIndicator size="small" color={colors.textInverse} />
-            : <Text style={styles.saveBtnText}>{t('common.save')}</Text>
-          }
-        </TouchableOpacity>
-      </View>
+      <SafeAreaView edges={['top']} style={{ backgroundColor: colors.background }}>
+        {/* Navbar */}
+        <View style={styles.navbar}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
+            <Text style={styles.backIcon}>‹</Text>
+          </TouchableOpacity>
+          <Text style={styles.navTitle}>{t('programs.editProgram')}</Text>
+          <TouchableOpacity
+            style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
+            onPress={handleSave}
+            disabled={saving}
+            activeOpacity={0.8}
+          >
+            {saving
+              ? <ActivityIndicator size="small" color="#fff" />
+              : <Text style={styles.saveBtnText}>{t('common.save')}</Text>
+            }
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {/* Metadata */}
         <Text style={styles.sectionLabel}>{t('programs.step1')}</Text>
-        <View style={styles.section}>
+        <View style={styles.metaCard}>
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>{t('programs.programName')}</Text>
             <TextInput
@@ -310,18 +314,25 @@ export default function EditProgramScreen() {
           </View>
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>{t('programs.difficulty')}</Text>
-            <View style={styles.pillRow}>
-              {difficulties.map((d) => (
-                <TouchableOpacity
-                  key={d}
-                  style={[styles.pill, difficulty === d && styles.pillActive]}
-                  onPress={() => setDifficulty(d)}
-                >
-                  <Text style={[styles.pillText, difficulty === d && styles.pillTextActive]}>
-                    {t(`programs.${d}` as any)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+            <View style={styles.segmentTrack}>
+              {difficulties.map((d) => {
+                const diffColor =
+                  d === 'beginner' ? colors.success :
+                  d === 'intermediate' ? colors.warning : colors.error;
+                const active = difficulty === d;
+                return (
+                  <TouchableOpacity
+                    key={d}
+                    style={[styles.segmentItem, active && { backgroundColor: diffColor }]}
+                    onPress={() => setDifficulty(d)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
+                      {t(`programs.${d}` as any)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
         </View>
@@ -351,11 +362,16 @@ export default function EditProgramScreen() {
               <TouchableOpacity
                 style={styles.dayHeaderContent}
                 onPress={() => setExpandedDay(expandedDay === day.id ? null : day.id)}
+                activeOpacity={0.8}
               >
-                <Text style={styles.dayTitle}>{t('programs.day', { number: day.day_number })}</Text>
-                <Text style={styles.dayMeta}>
-                  {day.exercises.length} {t('programs.exercises')}  {expandedDay === day.id ? '▲' : '▼'}
-                </Text>
+                <View style={styles.dayNumberBadge}>
+                  <Text style={styles.dayNumberText}>{day.day_number}</Text>
+                </View>
+                <View style={styles.dayHeaderCenter}>
+                  <Text style={styles.dayTitle}>{t('programs.day', { number: day.day_number })}</Text>
+                  <Text style={styles.dayMeta}>{day.exercises.length} {t('programs.exercises')}</Text>
+                </View>
+                <Text style={styles.dayChevron}>{expandedDay === day.id ? '▲' : '▼'}</Text>
               </TouchableOpacity>
             </View>
 
@@ -373,7 +389,7 @@ export default function EditProgramScreen() {
                     ]}
                   >
                     {ex.superset_group !== null && <View style={editStyles.ssSidebar} />}
-                    {/* Drag handle column */}
+                    {/* Reorder column */}
                     <View style={styles.exReorderCol}>
                       <TouchableOpacity
                         style={[styles.reorderBtn, exIdx === 0 && styles.reorderBtnDisabled]}
@@ -497,49 +513,100 @@ export default function EditProgramScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: {
-    paddingTop: 60, paddingBottom: spacing.lg, paddingHorizontal: spacing['2xl'],
-    backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-  },
-  backText: { fontSize: fontSize.md, color: colors.primary, fontWeight: '600' },
-  headerTitle: { fontSize: fontSize.lg, fontWeight: '700', color: colors.text, flex: 1, textAlign: 'center' },
-  saveBtn: {
-    backgroundColor: colors.primary, borderRadius: borderRadius.sm,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
-    minWidth: 60, alignItems: 'center',
-  },
-  saveBtnDisabled: { opacity: 0.5 },
-  saveBtnText: { fontSize: fontSize.sm, fontWeight: '700', color: colors.textInverse },
 
+  // ── Navbar ──────────────────────────────────────────────────────────────────
+  navbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing['2xl'],
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+    gap: spacing.md,
+    backgroundColor: colors.background,
+  },
+  backBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: colors.accentFaded,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  backIcon: { fontSize: 26, color: colors.primary, fontWeight: '600', lineHeight: 30, marginLeft: -2 },
+  navTitle: { flex: 1, fontSize: fontSize.md, fontWeight: '800', color: colors.text, letterSpacing: -0.2 },
+  saveBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    minWidth: 68,
+    alignItems: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  saveBtnDisabled: { opacity: 0.5, shadowOpacity: 0 },
+  saveBtnText: { fontSize: fontSize.sm, fontWeight: '800', color: '#fff' },
+
+  // ── Layout ──────────────────────────────────────────────────────────────────
   content: { padding: spacing['2xl'], paddingBottom: 100, gap: spacing.lg },
-  section: { gap: spacing.md },
   sectionLabel: {
-    fontSize: fontSize.sm, fontWeight: '600', color: colors.textMuted,
-    textTransform: 'uppercase', letterSpacing: 0.5,
+    fontSize: fontSize.xs, fontWeight: '700', color: colors.textMuted,
+    textTransform: 'uppercase', letterSpacing: 1,
+  },
+
+  // ── Metadata card ─────────────────────────────────────────────────────────
+  metaCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.xl,
+    padding: spacing.xl,
+    gap: spacing.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
   fieldGroup: { gap: spacing.xs },
-  fieldLabel: { fontSize: fontSize.sm, fontWeight: '600', color: colors.textSecondary },
+  fieldLabel: { fontSize: fontSize.xs, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
   input: {
-    backgroundColor: colors.card, borderRadius: borderRadius.sm,
-    borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1.5, borderColor: colors.border,
     paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
     fontSize: fontSize.md, color: colors.text,
   },
   textarea: { minHeight: 72, textAlignVertical: 'top' },
-  pillRow: { flexDirection: 'row', gap: spacing.sm },
-  pill: {
-    borderRadius: borderRadius.full, paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card,
-  },
-  pillActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  pillText: { fontSize: fontSize.sm, fontWeight: '600', color: colors.textMuted },
-  pillTextActive: { color: colors.textInverse },
 
-  // Day card
+  // Segmented difficulty control
+  segmentTrack: {
+    flexDirection: 'row',
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    padding: 3,
+  },
+  segmentItem: {
+    flex: 1, alignItems: 'center',
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+  },
+  segmentText: { fontSize: fontSize.sm, fontWeight: '600', color: colors.textMuted },
+  segmentTextActive: { color: '#fff', fontWeight: '800' },
+
+  // ── Day card ──────────────────────────────────────────────────────────────
   dayCard: {
-    backgroundColor: colors.card, borderRadius: borderRadius.md,
-    borderWidth: 1, borderColor: colors.border, overflow: 'hidden',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.xl,
+    borderWidth: 1.5, borderColor: colors.border,
+    overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
   },
   dayHeader: {
     flexDirection: 'row', alignItems: 'center',
@@ -551,46 +618,75 @@ const styles = StyleSheet.create({
   },
   dayHeaderContent: {
     flex: 1, flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', paddingLeft: spacing.sm,
+    gap: spacing.sm, paddingLeft: spacing.sm,
   },
-  dayTitle: { fontSize: fontSize.md, fontWeight: '700', color: colors.text },
-  dayMeta: { fontSize: fontSize.sm, color: colors.textMuted },
-  dayBody: { padding: spacing.md, borderTopWidth: 1, borderTopColor: colors.borderLight, gap: spacing.md },
+  dayNumberBadge: {
+    width: 34, height: 34, borderRadius: 17,
+    backgroundColor: colors.accentFaded,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  dayNumberText: { fontSize: fontSize.sm, fontWeight: '800', color: colors.accent },
+  dayHeaderCenter: { flex: 1 },
+  dayTitle: { fontSize: fontSize.md, fontWeight: '800', color: colors.text, letterSpacing: -0.2 },
+  dayMeta: { fontSize: fontSize.xs, color: colors.textMuted, fontWeight: '500', marginTop: 1 },
+  dayChevron: { fontSize: fontSize.xs, color: colors.textMuted },
+  dayBody: {
+    padding: spacing.lg,
+    borderTopWidth: 1, borderTopColor: colors.borderLight,
+    gap: spacing.md,
+    backgroundColor: colors.background,
+  },
   noExText: { fontSize: fontSize.sm, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.sm },
 
-  // Exercise row
+  // ── Exercise row ──────────────────────────────────────────────────────────
   exerciseRow: {
-    backgroundColor: colors.surface, borderRadius: borderRadius.sm,
-    borderWidth: 1, borderColor: colors.borderLight,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1, borderColor: colors.border,
     flexDirection: 'row', alignItems: 'flex-start',
+    overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 1,
   },
   exReorderCol: {
     width: 32, alignItems: 'center', justifyContent: 'center',
-    gap: 2, paddingTop: spacing.sm, paddingBottom: spacing.sm, paddingLeft: spacing.xs,
+    gap: 2, paddingVertical: spacing.md, paddingLeft: spacing.xs,
   },
-  exFieldsCol: { flex: 1, padding: spacing.sm, gap: spacing.xs },
+  exFieldsCol: { flex: 1, padding: spacing.md, gap: spacing.sm },
   exerciseRowHeader: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
   exerciseMiniRow: { flexDirection: 'row', gap: spacing.sm },
-  miniLabel: { fontSize: fontSize.xs, fontWeight: '600', color: colors.textMuted },
+  miniLabel: { fontSize: fontSize.xs, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
   inputMini: {
-    backgroundColor: colors.card, borderRadius: borderRadius.sm,
-    borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5, borderColor: colors.border,
     paddingHorizontal: spacing.sm, paddingVertical: spacing.xs,
-    fontSize: fontSize.sm, color: colors.text,
+    fontSize: fontSize.sm, color: colors.text, textAlign: 'center',
   },
-  removeExBtn: { padding: spacing.xs },
-  removeExText: { fontSize: fontSize.md, color: colors.textMuted },
+  removeExBtn: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: `${colors.error}12`,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  removeExText: { fontSize: 14, color: colors.error, fontWeight: '700', lineHeight: 16 },
   addExBtn: {
-    borderWidth: 1, borderColor: colors.primaryLight, borderStyle: 'dashed',
-    borderRadius: borderRadius.sm, padding: spacing.sm, alignItems: 'center',
+    borderWidth: 1.5, borderColor: colors.accent, borderStyle: 'dashed',
+    borderRadius: borderRadius.full, paddingVertical: spacing.sm,
+    alignItems: 'center', backgroundColor: colors.accentFaded,
   },
-  addExBtnText: { fontSize: fontSize.sm, fontWeight: '600', color: colors.primaryLight },
+  addExBtnText: { fontSize: fontSize.sm, fontWeight: '700', color: colors.accent },
 
-  // Reorder buttons (shared for days and exercises)
-  reorderBtn: { padding: 3, borderRadius: 4 },
+  // Reorder buttons
+  reorderBtn: {
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: colors.accentFaded,
+    alignItems: 'center', justifyContent: 'center',
+  },
   reorderBtnDisabled: { opacity: 0.2 },
-  reorderBtnText: { fontSize: 11, color: colors.primary, fontWeight: '700' },
-  reorderBtnTextDisabled: { color: colors.textMuted },
+  reorderBtnText: { fontSize: 10, color: colors.primary, fontWeight: '800' },
 });
 
 // Superset-specific styles (kept separate to avoid style-object key collisions)

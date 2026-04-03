@@ -173,11 +173,11 @@ export default function CreateSessionScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Nav bar */}
       <View style={styles.navbar}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
           <Text style={styles.backIcon}>‹</Text>
         </TouchableOpacity>
         <Text style={styles.navTitle}>{t('schedule.newSession')}</Text>
-        <View style={{ width: 36 }} />
+        <View style={{ width: 40 }} />
       </View>
 
       <KeyboardAvoidingView
@@ -225,40 +225,82 @@ export default function CreateSessionScreen() {
                 placeholder="00"
                 placeholderTextColor={colors.textMuted}
               />
-              <TouchableOpacity
-                style={styles.ampmBtn}
-                onPress={() => setAmpm((a) => (a === 'AM' ? 'PM' : 'AM'))}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.ampmText}>{ampm}</Text>
-              </TouchableOpacity>
+              {/* AM / PM segmented control */}
+              <View style={styles.ampmSegment}>
+                {(['AM', 'PM'] as const).map((p) => (
+                  <TouchableOpacity
+                    key={p}
+                    style={[styles.ampmOption, ampm === p && styles.ampmOptionActive]}
+                    onPress={() => setAmpm(p)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.ampmOptionText, ampm === p && styles.ampmOptionTextActive]}>{p}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
           </View>
 
           {/* ── Duration ── */}
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>{t('schedule.duration')}</Text>
-            <TextInput
-              style={styles.input}
-              value={duration}
-              onChangeText={(v) => setDuration(v.replace(/\D/g, ''))}
-              keyboardType="number-pad"
-              placeholder={t('schedule.durationPlaceholder')}
-              placeholderTextColor={colors.textMuted}
-            />
+            <View style={styles.stepperRow}>
+              <TouchableOpacity
+                style={styles.stepperBtn}
+                onPress={() => setDuration((d) => String(Math.max(5, parseInt(d, 10) - 5)))}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.stepperBtnText}>−</Text>
+              </TouchableOpacity>
+              <View style={styles.stepperValueBox}>
+                <Text style={styles.stepperValue}>{duration}</Text>
+                <Text style={styles.stepperUnit}>min</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.stepperBtn}
+                onPress={() => setDuration((d) => String(parseInt(d, 10) + 5))}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.stepperBtnText}>+</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.presetRow}>
+              {[30, 45, 60, 90].map((p) => (
+                <TouchableOpacity
+                  key={p}
+                  style={[styles.presetChip, duration === String(p) && styles.presetChipActive]}
+                  onPress={() => setDuration(String(p))}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.presetChipText, duration === String(p) && styles.presetChipTextActive]}>{p}m</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
 
           {/* ── Max Participants ── */}
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>{t('schedule.maxClients')}</Text>
-            <TextInput
-              style={styles.input}
-              value={maxClients}
-              onChangeText={(v) => setMaxClients(v.replace(/\D/g, ''))}
-              keyboardType="number-pad"
-              placeholder={t('schedule.maxClientsPlaceholder')}
-              placeholderTextColor={colors.textMuted}
-            />
+            <View style={styles.stepperRow}>
+              <TouchableOpacity
+                style={styles.stepperBtn}
+                onPress={() => setMaxClients((c) => String(Math.max(0, parseInt(c || '0', 10) - 1)))}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.stepperBtnText}>−</Text>
+              </TouchableOpacity>
+              <View style={styles.stepperValueBox}>
+                <Text style={styles.stepperValue}>{maxClients === '' || maxClients === '0' ? '∞' : maxClients}</Text>
+                <Text style={styles.stepperUnit}>{maxClients === '' || maxClients === '0' ? 'unlimited' : 'clients'}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.stepperBtn}
+                onPress={() => setMaxClients((c) => String(parseInt(c || '0', 10) + 1))}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.stepperBtnText}>+</Text>
+              </TouchableOpacity>
+            </View>
             <Text style={styles.fieldHint}>{t('schedule.maxClientsHint')}</Text>
           </View>
 
@@ -279,7 +321,8 @@ export default function CreateSessionScreen() {
                     onPress={() => toggleClient(p.id)}
                     activeOpacity={0.8}
                   >
-                    <Avatar name={p.display_name} />
+                    {isSelected && <View style={styles.clientAccentBar} />}
+                    <Avatar name={p.display_name} size={40} />
                     <View style={styles.clientInfo}>
                       <Text style={styles.clientName}>{p.display_name}</Text>
                       <Text style={styles.clientUsername}>@{p.username}</Text>
@@ -364,149 +407,229 @@ export default function CreateSessionScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
 
+  // ── Navbar ────────────────────────────────────────────────────────────────
   navbar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing['2xl'],
     paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
-    backgroundColor: colors.card,
+    backgroundColor: colors.background,
   },
-  backBtn: { width: 36, height: 36, justifyContent: 'center' },
-  backIcon: { fontSize: 26, color: colors.primary, fontWeight: '600', lineHeight: 30 },
-  navTitle: { fontSize: fontSize.lg, fontWeight: '700', color: colors.text },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.accentFaded,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backIcon: { fontSize: 26, color: colors.primary, fontWeight: '600', lineHeight: 30, marginLeft: -2 },
+  navTitle: { fontSize: fontSize.lg, fontWeight: '800', color: colors.text, letterSpacing: -0.3 },
 
+  // ── Scroll ────────────────────────────────────────────────────────────────
   scrollContent: {
     paddingHorizontal: spacing['2xl'],
-    paddingTop: spacing['2xl'],
+    paddingTop: spacing.lg,
     paddingBottom: spacing['5xl'],
   },
 
+  // ── Field group ───────────────────────────────────────────────────────────
   fieldGroup: { marginBottom: spacing['2xl'] },
   fieldLabel: {
-    fontSize: fontSize.sm,
-    fontWeight: '600',
-    color: colors.textSecondary,
+    fontSize: fontSize.xs,
+    fontWeight: '700',
+    color: colors.textMuted,
     marginBottom: spacing.sm,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 1,
   },
 
+  // ── Inputs ────────────────────────────────────────────────────────────────
   input: {
-    backgroundColor: colors.card,
-    borderRadius: borderRadius.sm,
-    borderWidth: 1,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1.5,
     borderColor: colors.border,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     fontSize: fontSize.md,
     color: colors.text,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
   },
-  textarea: { minHeight: 80, textAlignVertical: 'top', paddingTop: spacing.md },
+  textarea: { minHeight: 88, textAlignVertical: 'top', paddingTop: spacing.md },
 
+  // ── Date selector ─────────────────────────────────────────────────────────
   selectField: {
-    backgroundColor: colors.card,
-    borderRadius: borderRadius.sm,
-    borderWidth: 1,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1.5,
     borderColor: colors.border,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  selectFieldText: { fontSize: fontSize.md, color: colors.text },
-  chevron: { fontSize: 20, color: colors.textMuted, fontWeight: '600' },
+  selectFieldText: { fontSize: fontSize.md, fontWeight: '600', color: colors.text },
+  chevron: { fontSize: 22, color: colors.accent, fontWeight: '700' },
 
+  // ── Time row ──────────────────────────────────────────────────────────────
   timeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  timeInput: { width: 66, textAlign: 'center' },
-  timeSep: { fontSize: fontSize.xl, fontWeight: '700', color: colors.text },
-  ampmBtn: {
+  timeInput: { width: 70, textAlign: 'center', fontWeight: '700' },
+  timeSep: { fontSize: fontSize.xl, fontWeight: '800', color: colors.text },
+
+  // AM/PM segmented control
+  ampmSegment: {
+    flexDirection: 'row',
+    backgroundColor: colors.surfaceLight,
+    borderRadius: borderRadius.lg,
+    padding: 3,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  ampmOption: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+    minWidth: 46,
+    alignItems: 'center',
+  },
+  ampmOptionActive: {
     backgroundColor: colors.primary,
-    borderRadius: borderRadius.sm,
-    minWidth: 52,
-    alignItems: 'center' as const,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  ampmText: {
-    color: colors.textInverse,
-    fontWeight: '700' as const,
-    fontSize: fontSize.sm,
-  },
+  ampmOptionText: { fontSize: fontSize.sm, fontWeight: '700', color: colors.textMuted },
+  ampmOptionTextActive: { color: '#fff' },
 
-  // Clients
-  emptyClients: {
-    backgroundColor: colors.card,
-    borderRadius: borderRadius.sm,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
+  // ── Stepper (duration + max clients) ──────────────────────────────────────
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.xl,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    overflow: 'hidden',
   },
-  emptyClientsText: { fontSize: fontSize.sm, color: colors.textMuted, textAlign: 'center' },
+  stepperBtn: {
+    width: 52,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceLight,
+  },
+  stepperBtnText: { fontSize: fontSize.xl, fontWeight: '300', color: colors.primary, lineHeight: 28 },
+  stepperValueBox: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.sm },
+  stepperValue: { fontSize: fontSize.xl, fontWeight: '800', color: colors.text, letterSpacing: -0.5 },
+  stepperUnit: { fontSize: fontSize.xs, fontWeight: '600', color: colors.textMuted, marginTop: 1 },
+
+  presetRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  presetChip: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.lg,
+    backgroundColor: colors.surfaceLight,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: 'center',
+  },
+  presetChipActive: { backgroundColor: colors.accentFaded, borderColor: colors.accent },
+  presetChipText: { fontSize: fontSize.sm, fontWeight: '700', color: colors.textMuted },
+  presetChipTextActive: { color: colors.accent },
+
+  // ── Clients ───────────────────────────────────────────────────────────────
+  emptyClients: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.xl,
+    padding: spacing.lg,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+  },
+  emptyClientsText: { fontSize: fontSize.sm, color: colors.textMuted, textAlign: 'center', fontWeight: '600' },
 
   clientRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.card,
-    borderRadius: borderRadius.sm,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.xl,
+    borderWidth: 1.5,
+    borderColor: colors.border,
     padding: spacing.md,
     marginBottom: spacing.sm,
+    overflow: 'hidden',
   },
-  clientRowSelected: { borderColor: colors.primary, backgroundColor: colors.primary + '08' },
+  clientRowSelected: { borderColor: colors.accent, backgroundColor: colors.accentFaded },
+  clientAccentBar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    backgroundColor: colors.accent,
+  },
   clientInfo: { flex: 1, marginLeft: spacing.md },
-  clientName: { fontSize: fontSize.sm, fontWeight: '600', color: colors.text },
-  clientUsername: { fontSize: fontSize.xs, color: colors.textMuted },
+  clientName: { fontSize: fontSize.sm, fontWeight: '700', color: colors.text },
+  clientUsername: { fontSize: fontSize.xs, color: colors.textMuted, marginTop: 1 },
   checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     borderWidth: 2,
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkboxSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
-  checkmark: { color: colors.textInverse, fontSize: 12, fontWeight: '700' },
+  checkboxSelected: { backgroundColor: colors.accent, borderColor: colors.accent },
+  checkmark: { color: '#fff', fontSize: 13, fontWeight: '800' },
 
-  // Avatar
+  // ── Avatar ────────────────────────────────────────────────────────────────
   avatar: {
-    backgroundColor: colors.primary + '22',
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { color: colors.primary, fontWeight: '700' },
+  avatarText: { color: '#fff', fontWeight: '800' },
 
-  fieldHint: {
-    fontSize: fontSize.xs,
-    color: colors.textMuted,
-    marginTop: spacing.xs,
-  },
+  fieldHint: { fontSize: fontSize.xs, color: colors.textMuted, marginTop: spacing.sm },
 
-  // Create button
+  // ── Create button ─────────────────────────────────────────────────────────
   createBtn: {
     backgroundColor: colors.primary,
-    borderRadius: borderRadius.md,
+    borderRadius: borderRadius.full,
     paddingVertical: spacing.lg,
     alignItems: 'center',
-    marginTop: spacing.sm,
+    marginTop: spacing.md,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
   },
-  createBtnDisabled: { opacity: 0.6 },
-  createBtnText: { color: colors.textInverse, fontSize: fontSize.md, fontWeight: '700' },
+  createBtnDisabled: { opacity: 0.55 },
+  createBtnText: { color: '#fff', fontSize: fontSize.md, fontWeight: '800', letterSpacing: 0.2 },
 
-  // Modal
+  // ── Modal ─────────────────────────────────────────────────────────────────
   modalBackdrop: {
     flex: 1,
     backgroundColor: colors.overlay,
     justifyContent: 'center',
     paddingHorizontal: spacing['2xl'],
   },
-  modalContent: {
-    borderRadius: borderRadius.lg,
-    overflow: 'hidden',
-  },
+  modalContent: { borderRadius: borderRadius.xl, overflow: 'hidden' },
 });

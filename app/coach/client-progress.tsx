@@ -191,12 +191,15 @@ export default function ClientProgressScreen() {
       </Modal>
 
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backText}>← {t('common.back')}</Text>
+      <View style={styles.navbar}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
+          <Text style={styles.backIcon}>‹</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('progress.clientProgress')}</Text>
-        {clientName ? <Text style={styles.clientName}>{clientName}</Text> : null}
+        <View style={styles.navCenter}>
+          <Text style={styles.navTitle}>{clientName ?? t('progress.clientProgress')}</Text>
+          <Text style={styles.navSubtitle}>{t('progress.clientProgress')}</Text>
+        </View>
+        <View style={{ width: 40 }} />
       </View>
 
       {/* Scrollable pill tab bar */}
@@ -228,7 +231,7 @@ export default function ClientProgressScreen() {
               <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xl }} />
             ) : measurements.length === 0 ? (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyIcon}>⚖️</Text>
+                <View style={styles.emptyIconWrap}><Text style={styles.emptyIcon}>⚖️</Text></View>
                 <Text style={styles.emptyText}>{t('progress.noMeasurements')}</Text>
               </View>
             ) : (
@@ -243,12 +246,14 @@ export default function ClientProgressScreen() {
                           <Text style={styles.statLabel}>{t('progress.weightKg')} kg</Text>
                         </View>
                       )}
+                      {latest.weight_kg != null && latest.body_fat_pct != null && <View style={styles.statDivider} />}
                       {latest.body_fat_pct != null && (
                         <View style={styles.statItem}>
                           <Text style={styles.statValue}>{latest.body_fat_pct}%</Text>
                           <Text style={styles.statLabel}>{t('progress.bodyFat')}</Text>
                         </View>
                       )}
+                      {latest.body_fat_pct != null && latest.muscle_mass_kg != null && <View style={styles.statDivider} />}
                       {latest.muscle_mass_kg != null && (
                         <View style={styles.statItem}>
                           <Text style={styles.statValue}>{latest.muscle_mass_kg}</Text>
@@ -272,13 +277,16 @@ export default function ClientProgressScreen() {
 
                 {measurements.map((m) => (
                   <View key={m.id} style={styles.logRow}>
-                    <Text style={styles.logDate}>{m.date}</Text>
-                    <View style={styles.logStats}>
-                      {m.weight_kg != null && <Text style={styles.logStat}>{m.weight_kg} kg</Text>}
-                      {m.body_fat_pct != null && <Text style={styles.logStat}>{m.body_fat_pct}% fat</Text>}
-                      {m.muscle_mass_kg != null && <Text style={styles.logStat}>{m.muscle_mass_kg} kg muscle</Text>}
+                    <View style={styles.logAccentBar} />
+                    <View style={styles.logInfo}>
+                      <Text style={styles.logDate}>{m.date}</Text>
+                      <View style={styles.logStats}>
+                        {m.weight_kg != null && <View style={styles.logStatChip}><Text style={styles.logStat}>{m.weight_kg} kg</Text></View>}
+                        {m.body_fat_pct != null && <View style={styles.logStatChip}><Text style={styles.logStat}>{m.body_fat_pct}% fat</Text></View>}
+                        {m.muscle_mass_kg != null && <View style={styles.logStatChip}><Text style={styles.logStat}>{m.muscle_mass_kg} kg muscle</Text></View>}
+                      </View>
+                      {m.notes ? <Text style={styles.logNotes}>{m.notes}</Text> : null}
                     </View>
-                    {m.notes ? <Text style={styles.logNotes}>{m.notes}</Text> : null}
                   </View>
                 ))}
               </>
@@ -293,7 +301,7 @@ export default function ClientProgressScreen() {
               <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xl }} />
             ) : strengthLogs.length === 0 ? (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyIcon}>🏋️</Text>
+                <View style={styles.emptyIconWrap}><Text style={styles.emptyIcon}>🏋️</Text></View>
                 <Text style={styles.emptyText}>{t('progress.noStrength')}</Text>
               </View>
             ) : (
@@ -355,17 +363,22 @@ export default function ClientProgressScreen() {
                       key={log.id}
                       style={[styles.logRow, log.is_pr && styles.logRowPR]}
                     >
-                      <View style={styles.logRowHeader}>
-                        <Text style={styles.logDate}>{log.date}</Text>
-                        {log.is_pr && (
-                          <View style={styles.prBadgeContainer}>
-                            <Text style={styles.prBadgeText}>{t('progress.prBadge')}</Text>
-                          </View>
-                        )}
+                      <View style={[styles.logAccentBar, { backgroundColor: log.is_pr ? colors.warning : colors.success }]} />
+                      <View style={styles.logInfo}>
+                        <View style={styles.logRowHeader}>
+                          <Text style={styles.logDate}>{log.date}</Text>
+                          {log.is_pr && (
+                            <View style={styles.prBadgeContainer}>
+                              <Text style={styles.prBadgeText}>{t('progress.prBadge')}</Text>
+                            </View>
+                          )}
+                        </View>
+                        <View style={styles.logStatChip}>
+                          <Text style={styles.logStat}>
+                            {log.weight_kg} kg · {log.sets} × {log.reps}
+                          </Text>
+                        </View>
                       </View>
-                      <Text style={styles.logStat}>
-                        {log.weight_kg} kg · {log.sets} × {log.reps}
-                      </Text>
                     </View>
                   ))}
               </>
@@ -380,7 +393,7 @@ export default function ClientProgressScreen() {
               <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xl }} />
             ) : photos.length === 0 ? (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyIcon}>📸</Text>
+                <View style={styles.emptyIconWrap}><Text style={styles.emptyIcon}>📸</Text></View>
                 <Text style={styles.emptyText}>{t('progress.noPhotos')}</Text>
               </View>
             ) : (
@@ -415,7 +428,7 @@ export default function ClientProgressScreen() {
               <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xl }} />
             ) : programsProgress.length === 0 ? (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyIcon}>📋</Text>
+                <View style={styles.emptyIconWrap}><Text style={styles.emptyIcon}>📋</Text></View>
                 <Text style={styles.emptyText}>{t('progress.noProgramsAssigned')}</Text>
               </View>
             ) : (
@@ -470,172 +483,211 @@ export default function ClientProgressScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.card },
-  header: {
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xs,
-    paddingHorizontal: spacing['2xl'],
-    backgroundColor: colors.card,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  backButton: { marginBottom: 0 },
-  backText: { fontSize: fontSize.md, color: colors.primary, fontWeight: '600' },
-  headerTitle: { fontSize: fontSize.xl, fontWeight: '700', color: colors.text },
-  clientName: { fontSize: fontSize.sm, color: colors.textMuted },
+  root: { flex: 1, backgroundColor: colors.background },
 
-  // Scrollable pill tabs
-  pillScroll: {
-    flexGrow: 0,
-    flexShrink: 0,
+  // ── Navbar ───────────────────────────────────────────────────────────────
+  navbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing['2xl'],
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.md,
+    backgroundColor: colors.background,
   },
-  tabBar: {
-    backgroundColor: 'transparent',
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.accentFaded,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  backIcon: { fontSize: 26, color: colors.primary, fontWeight: '600', lineHeight: 30, marginLeft: -2 },
+  navCenter: { flex: 1, alignItems: 'center' },
+  navTitle: { fontSize: fontSize.lg, fontWeight: '800', color: colors.text, letterSpacing: -0.3 },
+  navSubtitle: { fontSize: fontSize.xs, color: colors.textMuted, fontWeight: '500', marginTop: 1 },
+
+  // ── Tab pills ─────────────────────────────────────────────────────────────
+  pillScroll: { flexGrow: 0, flexShrink: 0 },
   tabBarContent: {
     flexDirection: 'row',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing['2xl'],
+    paddingBottom: spacing.md,
     gap: spacing.sm,
     alignItems: 'center',
   },
   tabPill: {
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xs + 2,
+    paddingVertical: spacing.sm,
     borderRadius: borderRadius.full,
     backgroundColor: colors.surface,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
   },
-  tabPillActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  tabPillText: {
-    fontSize: fontSize.sm,
-    fontWeight: '500',
-    color: colors.textMuted,
-  },
-  tabPillTextActive: {
-    color: '#fff',
-    fontWeight: '600',
-  },
+  tabPillActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  tabPillText: { fontSize: fontSize.sm, fontWeight: '600', color: colors.textMuted },
+  tabPillTextActive: { color: '#fff', fontWeight: '700' },
 
+  // ── Content ──────────────────────────────────────────────────────────────
   contentScroll: { flex: 1, backgroundColor: colors.background },
   content: { paddingHorizontal: spacing['2xl'], paddingBottom: 60, paddingTop: spacing.sm },
 
+  // ── Empty state ───────────────────────────────────────────────────────────
   emptyState: { alignItems: 'center', paddingVertical: spacing['4xl'] },
-  emptyIcon: { fontSize: 40, marginBottom: spacing.md },
-  emptyText: { fontSize: fontSize.md, color: colors.textMuted, textAlign: 'center' },
+  emptyIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: colors.accentFaded,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+  },
+  emptyIcon: { fontSize: 32 },
+  emptyText: { fontSize: fontSize.md, color: colors.textMuted, textAlign: 'center', fontWeight: '500' },
 
+  // ── Stats card (navy background) ─────────────────────────────────────────
   statsCard: {
-    backgroundColor: colors.card,
-    borderRadius: borderRadius.lg,
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.xl,
     padding: spacing.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
     marginBottom: spacing.md,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    elevation: 4,
   },
   statsCardTitle: {
-    fontSize: fontSize.sm,
-    color: colors.textMuted,
-    fontWeight: '500',
+    fontSize: fontSize.xs,
+    color: 'rgba(255,255,255,0.6)',
+    fontWeight: '700',
     marginBottom: spacing.md,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
-  statRow: { flexDirection: 'row', gap: spacing['2xl'] },
-  statItem: { alignItems: 'center' },
-  statValue: { fontSize: fontSize.xl, fontWeight: '700', color: colors.text },
-  statLabel: { fontSize: fontSize.xs, color: colors.textMuted, marginTop: spacing.xs },
+  statRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' },
+  statItem: { alignItems: 'center', flex: 1 },
+  statDivider: { width: 1, height: 36, backgroundColor: 'rgba(255,255,255,0.2)' },
+  statValue: { fontSize: fontSize['2xl'], fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
+  statLabel: { fontSize: fontSize.xs, color: 'rgba(255,255,255,0.6)', marginTop: 2, fontWeight: '600' },
 
+  // ── Chart card ─────────────────────────────────────────────────────────────
   chartCard: {
-    backgroundColor: colors.card,
-    borderRadius: borderRadius.lg,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.xl,
     padding: spacing.xl,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
     marginBottom: spacing.md,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
   chartLabel: {
-    fontSize: fontSize.sm,
+    fontSize: fontSize.xs,
     color: colors.textMuted,
-    fontWeight: '500',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
     marginBottom: spacing.md,
   },
-  chartRange: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.xs },
-  chartMin: { fontSize: fontSize.xs, color: colors.textMuted },
-  chartMax: { fontSize: fontSize.xs, color: colors.primary, fontWeight: '600' },
+  chartRange: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.sm },
+  chartMin: { fontSize: fontSize.xs, color: colors.textMuted, fontWeight: '500' },
+  chartMax: { fontSize: fontSize.xs, color: colors.primary, fontWeight: '700' },
 
+  // ── Log rows (accent bar style) ────────────────────────────────────────
   logRow: {
-    backgroundColor: colors.card,
-    borderRadius: borderRadius.md,
-    padding: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: spacing.sm,
-    gap: spacing.xs,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
-  logRowPR: { borderColor: colors.warning, backgroundColor: `${colors.warning}0A` },
+  logRowPR: { borderColor: colors.warning },
+  logAccentBar: { width: 4, backgroundColor: colors.primary },
+  logInfo: { flex: 1, padding: spacing.md, gap: spacing.xs },
   logRowHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  logDate: { fontSize: fontSize.sm, fontWeight: '600', color: colors.text },
+  logDate: { fontSize: fontSize.sm, fontWeight: '700', color: colors.text },
   logStats: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  logStat: { fontSize: fontSize.sm, color: colors.textSecondary },
+  logStatChip: {
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  logStat: { fontSize: fontSize.sm, color: colors.textSecondary, fontWeight: '600' },
   logNotes: { fontSize: fontSize.xs, color: colors.textMuted, fontStyle: 'italic' },
 
+  // ── PR ──────────────────────────────────────────────────────────────────
   prBadgeContainer: {
     backgroundColor: colors.warning,
     borderRadius: borderRadius.full,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
   },
-  prBadgeText: { color: '#fff', fontSize: fontSize.xs, fontWeight: '700' },
-
+  prBadgeText: { color: '#fff', fontSize: fontSize.xs, fontWeight: '800' },
   prBanner: {
-    backgroundColor: `${colors.warning}12`,
-    borderRadius: borderRadius.lg,
+    backgroundColor: colors.warningFaded,
+    borderRadius: borderRadius.xl,
     padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: `${colors.warning}35`,
+    borderWidth: 1.5,
+    borderColor: `${colors.warning}55`,
     marginBottom: spacing.md,
     gap: spacing.sm,
   },
-  prBannerTitle: { fontSize: fontSize.md, fontWeight: '700', color: colors.warning },
+  prBannerTitle: { fontSize: fontSize.md, fontWeight: '800', color: colors.warning },
   prBannerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  prBannerExercise: { fontSize: fontSize.sm, color: colors.text },
-  prBannerWeight: { fontSize: fontSize.sm, fontWeight: '700', color: colors.text },
+  prBannerExercise: { fontSize: fontSize.sm, color: colors.text, fontWeight: '500' },
+  prBannerWeight: { fontSize: fontSize.sm, fontWeight: '800', color: colors.text },
 
+  // ── Exercise picker ───────────────────────────────────────────────────────
   exercisePicker: { marginBottom: spacing.md },
   exerciseChip: {
     backgroundColor: colors.surface,
     borderRadius: borderRadius.full,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
   },
-  exerciseChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  exerciseChipText: { fontSize: fontSize.sm, color: colors.textMuted, fontWeight: '500' },
-  exerciseChipTextActive: { color: colors.textInverse },
+  exerciseChipActive: { backgroundColor: colors.success, borderColor: colors.success },
+  exerciseChipText: { fontSize: fontSize.sm, color: colors.textMuted, fontWeight: '600' },
+  exerciseChipTextActive: { color: '#fff', fontWeight: '700' },
 
-  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  // ── Photo grid ────────────────────────────────────────────────────────────
+  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   photoCard: {
-    width: '48%',
-    backgroundColor: colors.card,
-    borderRadius: borderRadius.md,
+    width: '47.5%',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.xl,
     borderWidth: 1,
     borderColor: colors.border,
     overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  photoImage: { width: '100%', aspectRatio: 1 },
-  photoMeta: { padding: spacing.sm },
-  photoLabel: {
-    fontSize: fontSize.xs,
-    color: colors.textSecondary,
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
+  photoImage: { width: '100%', aspectRatio: 0.85 },
+  photoMeta: { padding: spacing.sm, gap: 2 },
+  photoLabel: { fontSize: fontSize.sm, color: colors.text, fontWeight: '700', textTransform: 'capitalize' },
   photoDate: { fontSize: fontSize.xs, color: colors.textMuted },
 
-  // Fullscreen photo modal
+  // ── Fullscreen photo modal ───────────────────────────────────────────────
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.95)',
@@ -659,62 +711,39 @@ const styles = StyleSheet.create({
     width: Dimensions.get('window').width,
     height: Dimensions.get('window').height * 0.72,
   },
-  modalMeta: {
-    position: 'absolute',
-    bottom: 60,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
+  modalMeta: { position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center' },
   modalLabel: { fontSize: fontSize.md, color: '#fff', fontWeight: '600' },
   modalDate: { fontSize: fontSize.sm, color: 'rgba(255,255,255,0.7)', marginTop: 4 },
 
-  // Programs tab
+  // ── Programs ──────────────────────────────────────────────────────────────
   progCard: {
-    backgroundColor: colors.card,
-    borderRadius: borderRadius.lg,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.xl,
     padding: spacing.lg,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
     marginBottom: spacing.md,
     gap: spacing.sm,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  progCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  progCardTitle: {
-    flex: 1,
-    fontSize: fontSize.md,
-    fontWeight: '700',
-    color: colors.text,
-    marginRight: spacing.sm,
-  },
-  progCardMeta: {
-    fontSize: fontSize.sm,
-    fontWeight: '600',
-    color: colors.primary,
-  },
+  progCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  progCardTitle: { flex: 1, fontSize: fontSize.md, fontWeight: '800', color: colors.text, marginRight: spacing.sm, letterSpacing: -0.2 },
+  progCardMeta: { fontSize: fontSize.sm, fontWeight: '700', color: colors.accent },
   progressTrack: {
-    height: 6,
-    backgroundColor: colors.surface,
-    borderRadius: 3,
+    height: 8,
+    backgroundColor: colors.surfaceLight,
+    borderRadius: 4,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: colors.borderLight,
+    borderColor: colors.border,
   },
-  progressFill: {
-    height: '100%',
-    backgroundColor: colors.primary,
-    borderRadius: 3,
-  },
+  progressFill: { height: '100%', backgroundColor: colors.primary, borderRadius: 4 },
   daysList: { gap: spacing.sm, marginTop: spacing.xs },
-  dayRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-  },
+  dayRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   dayDot: {
     width: 10,
     height: 10,
@@ -724,22 +753,8 @@ const styles = StyleSheet.create({
     marginTop: 3,
     flexShrink: 0,
   },
-  dayDotDone: {
-    backgroundColor: colors.success,
-    borderColor: colors.success,
-  },
-  dayRowText: {
-    fontSize: fontSize.sm,
-    color: colors.textSecondary,
-  },
-  dayRowTextDone: {
-    color: colors.text,
-    fontWeight: '600',
-  },
-  dayFeedback: {
-    fontSize: fontSize.xs,
-    color: colors.textMuted,
-    fontStyle: 'italic',
-    marginTop: 2,
-  },
+  dayDotDone: { backgroundColor: colors.success, borderColor: colors.success },
+  dayRowText: { fontSize: fontSize.sm, color: colors.textSecondary },
+  dayRowTextDone: { color: colors.text, fontWeight: '600' },
+  dayFeedback: { fontSize: fontSize.xs, color: colors.textMuted, fontStyle: 'italic', marginTop: 2 },
 });

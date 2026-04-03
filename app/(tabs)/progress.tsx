@@ -17,6 +17,12 @@ import { colors, spacing, fontSize, borderRadius } from '../../src/constants/the
 
 type Section = 'measurements' | 'strength' | 'photos';
 
+const SECTION_META: Record<Section, { icon: string; color: string; faded: string }> = {
+  measurements: { icon: '⚖', color: colors.primary,     faded: colors.accentFaded },
+  strength:     { icon: '↑', color: colors.success,     faded: colors.successFaded },
+  photos:       { icon: '⬡', color: colors.accent,      faded: colors.accentFaded },
+};
+
 // ─── Simple bar sparkline ─────────────────────────────────────────────────────
 
 function SparkChart({ data, color = colors.primary }: { data: number[]; color?: string }) {
@@ -38,8 +44,8 @@ function SparkChart({ data, color = colors.primary }: { data: number[]; color?: 
             style={{
               width: BAR_W,
               height: h,
-              backgroundColor: isLast ? color : `${color}55`,
-              borderRadius: 2,
+              backgroundColor: isLast ? color : `${color}44`,
+              borderRadius: 3,
             }}
           />
         );
@@ -94,19 +100,21 @@ function MeasurementsSection() {
             {latest.weight_kg != null && (
               <View style={styles.statItem}>
                 <Text style={styles.statValue}>{latest.weight_kg}</Text>
-                <Text style={styles.statLabel}>{t('progress.weightKg')} ({t('progress.weightUnit')})</Text>
+                <Text style={styles.statLabel}>{t('progress.weightUnit')}</Text>
               </View>
             )}
+            {latest.weight_kg != null && latest.body_fat_pct != null && <View style={styles.statDivider} />}
             {latest.body_fat_pct != null && (
               <View style={styles.statItem}>
                 <Text style={styles.statValue}>{latest.body_fat_pct}%</Text>
                 <Text style={styles.statLabel}>{t('progress.bodyFat')}</Text>
               </View>
             )}
+            {latest.body_fat_pct != null && latest.muscle_mass_kg != null && <View style={styles.statDivider} />}
             {latest.muscle_mass_kg != null && (
               <View style={styles.statItem}>
                 <Text style={styles.statValue}>{latest.muscle_mass_kg}</Text>
-                <Text style={styles.statLabel}>{t('progress.muscleMass')} ({t('progress.weightUnit')})</Text>
+                <Text style={styles.statLabel}>Muscle kg</Text>
               </View>
             )}
           </View>
@@ -115,7 +123,10 @@ function MeasurementsSection() {
 
       {weights.length >= 2 && (
         <View style={styles.chartCard}>
-          <Text style={styles.chartLabel}>{t('progress.weightTrend')}</Text>
+          <View style={styles.chartHeader}>
+            <Text style={styles.chartLabel}>{t('progress.weightTrend')}</Text>
+            <Text style={styles.chartPeakLabel}>{Math.max(...weights)} kg</Text>
+          </View>
           <SparkChart data={weights} color={colors.primary} />
           <View style={styles.chartRange}>
             <Text style={styles.chartMin}>{Math.min(...weights)} kg</Text>
@@ -128,7 +139,7 @@ function MeasurementsSection() {
         <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xl }} />
       ) : measurements.length === 0 ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>⚖️</Text>
+          <View style={styles.emptyIconWrap}><Text style={styles.emptyIcon}>⚖️</Text></View>
           <Text style={styles.emptyText}>{t('progress.noMeasurements')}</Text>
         </View>
       ) : (
@@ -141,17 +152,18 @@ function MeasurementsSection() {
               onLongPress={() => handleDelete(m.id)}
               activeOpacity={0.7}
             >
+              <View style={styles.logAccentBar} />
               <View style={styles.logInfo}>
                 <Text style={styles.logDate}>{m.date}</Text>
                 <View style={styles.logStats}>
                   {m.weight_kg != null && (
-                    <Text style={styles.logStat}>{m.weight_kg} kg</Text>
+                    <View style={styles.logStatChip}><Text style={styles.logStat}>{m.weight_kg} kg</Text></View>
                   )}
                   {m.body_fat_pct != null && (
-                    <Text style={styles.logStat}>{m.body_fat_pct}% fat</Text>
+                    <View style={styles.logStatChip}><Text style={styles.logStat}>{m.body_fat_pct}% fat</Text></View>
                   )}
                   {m.muscle_mass_kg != null && (
-                    <Text style={styles.logStat}>{m.muscle_mass_kg} kg muscle</Text>
+                    <View style={styles.logStatChip}><Text style={styles.logStat}>{m.muscle_mass_kg} kg muscle</Text></View>
                   )}
                 </View>
                 {m.notes ? <Text style={styles.logNotes}>{m.notes}</Text> : null}
@@ -251,9 +263,12 @@ function StrengthSection() {
             ))}
           </ScrollView>
 
-          {chartWeights.length >= 2 && (
+      {chartWeights.length >= 2 && (
             <View style={styles.chartCard}>
-              <Text style={styles.chartLabel}>{t('progress.strengthTrend')}</Text>
+              <View style={styles.chartHeader}>
+                <Text style={styles.chartLabel}>{t('progress.strengthTrend')}</Text>
+                <Text style={styles.chartPeakLabel}>{Math.max(...chartWeights)} kg</Text>
+              </View>
               <SparkChart data={chartWeights} color={colors.success} />
               <View style={styles.chartRange}>
                 <Text style={styles.chartMin}>{Math.min(...chartWeights)} kg</Text>
@@ -273,6 +288,7 @@ function StrengthSection() {
                 onLongPress={() => handleDelete(log.id)}
                 activeOpacity={0.7}
               >
+                <View style={[styles.logAccentBar, { backgroundColor: log.is_pr ? colors.warning : colors.success }]} />
                 <View style={styles.logInfo}>
                   <View style={styles.logRowHeader}>
                     <Text style={styles.logDate}>{log.date}</Text>
@@ -282,9 +298,9 @@ function StrengthSection() {
                       </View>
                     )}
                   </View>
-                  <Text style={styles.logStat}>
-                    {log.weight_kg} kg · {log.sets} × {log.reps}
-                  </Text>
+                  <View style={styles.logStatChip}>
+                    <Text style={styles.logStat}>{log.weight_kg} kg · {log.sets} × {log.reps}</Text>
+                  </View>
                 </View>
               </TouchableOpacity>
             ))}
@@ -292,10 +308,10 @@ function StrengthSection() {
       )}
 
       {isLoading && strengthLogs.length === 0 ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xl }} />
+        <ActivityIndicator color={colors.success} style={{ marginTop: spacing.xl }} />
       ) : strengthLogs.length === 0 ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>🏋️</Text>
+          <View style={styles.emptyIconWrap}><Text style={styles.emptyIcon}>🏋️</Text></View>
           <Text style={styles.emptyText}>{t('progress.noStrength')}</Text>
         </View>
       ) : null}
@@ -339,10 +355,10 @@ function PhotosSection() {
       </TouchableOpacity>
 
       {isLoading && photos.length === 0 ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xl }} />
+        <ActivityIndicator color={colors.accent} style={{ marginTop: spacing.xl }} />
       ) : photos.length === 0 ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>📸</Text>
+          <View style={styles.emptyIconWrap}><Text style={styles.emptyIcon}>📸</Text></View>
           <Text style={styles.emptyText}>{t('progress.noPhotos')}</Text>
         </View>
       ) : (
@@ -386,35 +402,42 @@ export default function ProgressScreen() {
     { key: 'photos', label: t('progress.photos') },
   ];
 
+  const activeMeta = SECTION_META[section];
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>{t('tabs.progress')}</Text>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.tabBar}
-        contentContainerStyle={styles.tabBarContent}
-      >
-        {sections.map((s) => (
-          <TouchableOpacity
-            key={s.key}
-            style={[styles.tabPill, section === s.key && styles.tabPillActive]}
-            onPress={() => setSection(s.key)}
-            activeOpacity={0.75}
-          >
-            <Text style={[styles.tabPillText, section === s.key && styles.tabPillTextActive]}>
-              {s.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      {/* Fixed 3-up segmented control */}
+      <View style={styles.segmentedWrapper}>
+        {sections.map((s) => {
+          const active = section === s.key;
+          const meta = SECTION_META[s.key];
+          return (
+            <TouchableOpacity
+              key={s.key}
+              style={[styles.segment, active && { backgroundColor: meta.color }]}
+              onPress={() => setSection(s.key)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.segmentIcon, active && styles.segmentIconActive]}>
+                {meta.icon}
+              </Text>
+              <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
+                {s.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
 
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         {section === 'measurements' && <MeasurementsSection />}
         {section === 'strength' && <StrengthSection />}
@@ -428,182 +451,211 @@ export default function ProgressScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+
   header: {
     paddingHorizontal: spacing['2xl'],
-    paddingTop: spacing.md,
+    paddingTop: spacing.xl,
     paddingBottom: spacing.sm,
   },
-  title: { fontSize: fontSize['2xl'], fontWeight: '700', color: colors.text },
+  title: { fontSize: fontSize['2xl'], fontWeight: '800', color: colors.text, letterSpacing: -0.5 },
 
-  segmented: {
+  // ── Fixed 3-tab segmented control ───────────────────────────────────────────
+  segmentedWrapper: {
     flexDirection: 'row',
     marginHorizontal: spacing['2xl'],
-    marginBottom: spacing.md,
+    marginBottom: spacing.lg,
     backgroundColor: colors.surface,
-    borderRadius: borderRadius.md,
-    borderWidth: 1,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1.5,
     borderColor: colors.border,
     overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  segment: { flex: 1, paddingVertical: spacing.sm + 2, alignItems: 'center' },
-  segmentActive: { backgroundColor: colors.primary },
-  segmentText: { fontSize: fontSize.sm, fontWeight: '500', color: colors.textMuted },
-  segmentTextActive: { color: colors.textInverse, fontWeight: '600' },
-
-  // Scrollable pill tabs
-  tabBar: {
-    backgroundColor: 'transparent',
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  tabBarContent: {
-    flexDirection: 'row',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    gap: spacing.sm,
+  segment: {
+    flex: 1,
+    paddingVertical: spacing.md,
     alignItems: 'center',
+    gap: 3,
   },
-  tabPill: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xs + 2,
-    borderRadius: borderRadius.full,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  tabPillActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  tabPillText: {
-    fontSize: fontSize.sm,
-    fontWeight: '500',
-    color: colors.textMuted,
-  },
-  tabPillTextActive: {
-    color: '#fff',
-    fontWeight: '600',
-  },
+  segmentIcon: { fontSize: 15, color: colors.textMuted },
+  segmentIconActive: { color: '#fff' },
+  segmentText: { fontSize: fontSize.xs, fontWeight: '700', color: colors.textMuted },
+  segmentTextActive: { color: '#fff' },
 
-  content: { paddingHorizontal: spacing['2xl'], paddingBottom: 80, paddingTop: spacing.md },
+  content: { paddingHorizontal: spacing['2xl'], paddingBottom: 100, paddingTop: spacing.sm },
 
+  // ── Add CTA button ───────────────────────────────────────────────────────────
   addButton: {
     backgroundColor: colors.primary,
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
+    borderRadius: borderRadius.lg,
+    paddingVertical: spacing.lg,
     alignItems: 'center',
     marginBottom: spacing.lg,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.28,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  addButtonText: { color: colors.textInverse, fontWeight: '600', fontSize: fontSize.md },
+  addButtonText: { color: '#fff', fontWeight: '800', fontSize: fontSize.md, letterSpacing: 0.2 },
 
+  // ── Latest stats card ────────────────────────────────────────────────────────
   statsCard: {
-    backgroundColor: colors.card,
-    borderRadius: borderRadius.lg,
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.xl,
     padding: spacing.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
     marginBottom: spacing.md,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 4,
   },
   statsCardTitle: {
-    fontSize: fontSize.sm,
-    color: colors.textMuted,
-    fontWeight: '500',
+    fontSize: fontSize.xs,
+    color: 'rgba(255,255,255,0.65)',
+    fontWeight: '700',
     marginBottom: spacing.md,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
-  statRow: { flexDirection: 'row', gap: spacing['2xl'] },
-  statItem: { alignItems: 'center' },
-  statValue: { fontSize: fontSize.xl, fontWeight: '700', color: colors.text },
-  statLabel: { fontSize: fontSize.xs, color: colors.textMuted, marginTop: spacing.xs },
+  statRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' },
+  statItem: { alignItems: 'center', flex: 1 },
+  statDivider: { width: 1, height: 36, backgroundColor: 'rgba(255,255,255,0.2)' },
+  statValue: { fontSize: fontSize['2xl'], fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
+  statLabel: { fontSize: fontSize.xs, color: 'rgba(255,255,255,0.65)', marginTop: 2, fontWeight: '600' },
 
+  // ── Trend chart card ─────────────────────────────────────────────────────────
   chartCard: {
     backgroundColor: colors.card,
-    borderRadius: borderRadius.lg,
+    borderRadius: borderRadius.xl,
     padding: spacing.xl,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
     marginBottom: spacing.md,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  chartLabel: {
-    fontSize: fontSize.sm,
-    color: colors.textMuted,
-    fontWeight: '500',
-    marginBottom: spacing.md,
-  },
-  chartRange: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.xs },
-  chartMin: { fontSize: fontSize.xs, color: colors.textMuted },
-  chartMax: { fontSize: fontSize.xs, color: colors.primary, fontWeight: '600' },
+  chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
+  chartLabel: { fontSize: fontSize.xs, color: colors.textMuted, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
+  chartPeakLabel: { fontSize: fontSize.md, fontWeight: '800', color: colors.text },
+  chartRange: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.sm },
+  chartMin: { fontSize: fontSize.xs, color: colors.textMuted, fontWeight: '500' },
+  chartMax: { fontSize: fontSize.xs, color: colors.primary, fontWeight: '700' },
 
+  // ── Empty state ──────────────────────────────────────────────────────────────
   emptyState: { alignItems: 'center', paddingVertical: spacing['4xl'] },
-  emptyIcon: { fontSize: 40, marginBottom: spacing.md },
-  emptyText: { fontSize: fontSize.md, color: colors.textMuted, textAlign: 'center' },
+  emptyIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: colors.accentFaded,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+  },
+  emptyIcon: { fontSize: 32 },
+  emptyText: { fontSize: fontSize.md, color: colors.textMuted, textAlign: 'center', fontWeight: '500' },
 
-  hintText: { fontSize: fontSize.xs, color: colors.textMuted, marginBottom: spacing.sm },
+  hintText: { fontSize: fontSize.xs, color: colors.textMuted, marginBottom: spacing.sm, fontStyle: 'italic' },
+
+  // ── Log rows ─────────────────────────────────────────────────────────────────
   logRow: {
     backgroundColor: colors.card,
-    borderRadius: borderRadius.md,
-    padding: spacing.lg,
+    borderRadius: borderRadius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: spacing.sm,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
-  logRowPR: { borderColor: colors.warning, backgroundColor: `${colors.warning}0A` },
-  logInfo: { gap: spacing.xs },
+  logRowPR: { borderColor: colors.warning },
+  logAccentBar: { width: 4, backgroundColor: colors.primary },
+  logInfo: { flex: 1, padding: spacing.md, gap: spacing.xs },
   logRowHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  logDate: { fontSize: fontSize.sm, fontWeight: '600', color: colors.text },
+  logDate: { fontSize: fontSize.sm, fontWeight: '700', color: colors.text },
   logStats: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  logStat: { fontSize: fontSize.sm, color: colors.textSecondary },
+  logStatChip: {
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  logStat: { fontSize: fontSize.sm, color: colors.textSecondary, fontWeight: '600' },
   logNotes: { fontSize: fontSize.xs, color: colors.textMuted, fontStyle: 'italic' },
 
+  // ── PR ───────────────────────────────────────────────────────────────────────
   prBadgeContainer: {
     backgroundColor: colors.warning,
     borderRadius: borderRadius.full,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
   },
-  prBadgeText: { color: '#fff', fontSize: fontSize.xs, fontWeight: '700' },
+  prBadgeText: { color: '#fff', fontSize: fontSize.xs, fontWeight: '800' },
 
   prBanner: {
-    backgroundColor: `${colors.warning}12`,
-    borderRadius: borderRadius.lg,
+    backgroundColor: colors.warningFaded,
+    borderRadius: borderRadius.xl,
     padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: `${colors.warning}35`,
+    borderWidth: 1.5,
+    borderColor: `${colors.warning}55`,
     marginBottom: spacing.md,
     gap: spacing.sm,
   },
-  prBannerTitle: { fontSize: fontSize.md, fontWeight: '700', color: colors.warning },
+  prBannerTitle: { fontSize: fontSize.md, fontWeight: '800', color: colors.warning },
   prBannerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  prBannerExercise: { fontSize: fontSize.sm, color: colors.text },
-  prBannerWeight: { fontSize: fontSize.sm, fontWeight: '700', color: colors.text },
+  prBannerExercise: { fontSize: fontSize.sm, color: colors.text, fontWeight: '500' },
+  prBannerWeight: { fontSize: fontSize.sm, fontWeight: '800', color: colors.text },
 
-  exercisePicker: { marginBottom: spacing.md },
+  // ── Exercise picker ──────────────────────────────────────────────────────────
+  exercisePicker: { marginBottom: spacing.md, flexGrow: 0 },
   exerciseChip: {
     backgroundColor: colors.surface,
     borderRadius: borderRadius.full,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
   },
-  exerciseChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  exerciseChipText: { fontSize: fontSize.sm, color: colors.textMuted, fontWeight: '500' },
-  exerciseChipTextActive: { color: colors.textInverse },
+  exerciseChipActive: { backgroundColor: colors.success, borderColor: colors.success },
+  exerciseChipText: { fontSize: fontSize.sm, color: colors.textMuted, fontWeight: '600' },
+  exerciseChipTextActive: { color: '#fff', fontWeight: '700' },
 
-  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  // ── Photo grid ───────────────────────────────────────────────────────────────
+  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   photoCard: {
-    width: '31%',
+    width: '47.5%',
     backgroundColor: colors.card,
-    borderRadius: borderRadius.md,
+    borderRadius: borderRadius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  photoImage: { width: '100%', aspectRatio: 1 },
-  photoMeta: { padding: spacing.sm },
+  photoImage: { width: '100%', aspectRatio: 0.85 },
+  photoMeta: { padding: spacing.sm, gap: 2 },
   photoLabel: {
-    fontSize: fontSize.xs,
-    color: colors.textSecondary,
-    fontWeight: '600',
+    fontSize: fontSize.sm,
+    color: colors.text,
+    fontWeight: '700',
     textTransform: 'capitalize',
   },
   photoDate: { fontSize: fontSize.xs, color: colors.textMuted },

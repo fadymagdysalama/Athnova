@@ -160,32 +160,73 @@ function ClientView() {
     >
       {assignments.length === 0 ? (
         <View style={styles.emptyCard}>
+          <View style={[styles.emptyIconCircle, { backgroundColor: colors.accentFaded }]}>
+            <Text style={{ fontSize: 28 }}>📋</Text>
+          </View>
           <Text style={styles.emptyTitle}>{t('programs.noAssigned')}</Text>
           <Text style={styles.emptyHint}>Your coach will assign programs here</Text>
         </View>
       ) : (
-        assignments.map(({ program, current_day, id }) => (
-          <TouchableOpacity
-            key={id}
-            style={styles.programCard}
-            onPress={() => router.push({ pathname: '/programs/detail', params: { id: program.id } })}
-            activeOpacity={0.8}
-          >
-            <View style={styles.programCardTop}>
-              <Text style={styles.programTitle} numberOfLines={1}>{program.title}</Text>
-              <DifficultyBadge level={program.difficulty} />
-            </View>
-            {!!program.description && (
-              <Text style={styles.programDesc} numberOfLines={2}>{program.description}</Text>
-            )}
-            <View style={styles.programMeta}>
-              <Text style={styles.metaText}>{t('programs.days', { count: program.duration_days })}</Text>
-              <View style={styles.progressPill}>
-                <Text style={styles.progressText}>Day {current_day} / {program.duration_days}</Text>
+        assignments.map(({ program, current_day, id }) => {
+          const diffColor = DIFFICULTY_COLOR[program.difficulty] ?? colors.accent;
+          const donePct = Math.min(
+            ((current_day - 1) / Math.max(program.duration_days, 1)) * 100,
+            100,
+          );
+          return (
+            <TouchableOpacity
+              key={id}
+              style={styles.clientCard}
+              onPress={() => router.push({ pathname: '/programs/detail', params: { id: program.id } })}
+              activeOpacity={0.85}
+            >
+              {/* Difficulty accent strip */}
+              <View style={[styles.clientCardStrip, { backgroundColor: diffColor }]} />
+
+              <View style={styles.clientCardBody}>
+                {/* Title + difficulty badge */}
+                <View style={styles.programCardTop}>
+                  <Text style={styles.programTitle} numberOfLines={1}>{program.title}</Text>
+                  <DifficultyBadge level={program.difficulty} />
+                </View>
+
+                {/* Description */}
+                {!!program.description && (
+                  <Text style={styles.programDesc} numberOfLines={2}>{program.description}</Text>
+                )}
+
+                {/* Progress */}
+                <View style={styles.clientProgressBlock}>
+                  <View style={styles.clientProgressRow}>
+                    <Text style={styles.clientProgressLabel}>
+                      Day {current_day} of {program.duration_days}
+                    </Text>
+                    <Text style={[styles.clientProgressPct, { color: diffColor }]}>
+                      {Math.round(donePct)}%
+                    </Text>
+                  </View>
+                  <View style={styles.clientProgressTrack}>
+                    <View
+                      style={[
+                        styles.clientProgressFill,
+                        { width: `${Math.round(donePct)}%` as any, backgroundColor: diffColor },
+                      ]}
+                    />
+                  </View>
+                </View>
+
+                {/* Continue button */}
+                <TouchableOpacity
+                  style={[styles.clientContinueBtn, { backgroundColor: diffColor }]}
+                  onPress={() => router.push({ pathname: '/programs/detail', params: { id: program.id } })}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.clientContinueBtnText}>Continue  →</Text>
+                </TouchableOpacity>
               </View>
-            </View>
-          </TouchableOpacity>
-        ))
+            </TouchableOpacity>
+          );
+        })
       )}
     </ScrollView>
   );
@@ -225,25 +266,32 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing['2xl'],
-    paddingTop: spacing.md,
+    paddingTop: spacing.xl,
     paddingBottom: spacing.lg,
     backgroundColor: colors.background,
   },
   headerTitle: {
     fontSize: fontSize['2xl'],
-    fontWeight: '700',
+    fontWeight: '800',
     color: colors.text,
+    letterSpacing: -0.5,
   },
   createBtn: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.accent,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.sm + 1,
     borderRadius: borderRadius.full,
+    shadowColor: colors.accent,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
   createBtnText: {
     color: '#ffffff',
     fontSize: fontSize.sm,
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   container: {
     flex: 1,
@@ -252,7 +300,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing['2xl'],
     paddingTop: spacing.md,
     paddingBottom: spacing['4xl'],
-    gap: spacing.lg,
+    gap: spacing.md,
   },
   centered: {
     flex: 1,
@@ -264,34 +312,35 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xl,
     padding: spacing['3xl'],
     alignItems: 'center',
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: colors.border,
     borderStyle: 'dashed',
     marginTop: spacing.xl,
   },
   emptyIconCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: `${colors.primary}18`,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: colors.accentFaded,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: spacing.lg,
   },
   emptyIconPlus: {
-    fontSize: 32,
-    color: colors.primary,
+    fontSize: 30,
+    color: colors.accent,
     lineHeight: 36,
+    fontWeight: '300',
   },
   emptyTitle: {
     fontSize: fontSize.lg,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.text,
     marginBottom: spacing.xs,
   },
   emptyHint: {
     fontSize: fontSize.sm,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     textAlign: 'center',
   },
   programCard: {
@@ -300,6 +349,11 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     borderWidth: 1,
     borderColor: colors.border,
+    shadowColor: '#1A1A2E',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   programCardTop: {
     flexDirection: 'row',
@@ -309,10 +363,11 @@ const styles = StyleSheet.create({
   },
   programTitle: {
     fontSize: fontSize.lg,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.text,
     flex: 1,
     marginRight: spacing.sm,
+    letterSpacing: -0.2,
   },
   programDesc: {
     fontSize: fontSize.sm,
@@ -324,7 +379,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: spacing.sm,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
   },
   metaLeft: {
     flexDirection: 'column',
@@ -336,14 +394,15 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.full,
     alignSelf: 'flex-start',
   },
-  publishedBadge: { backgroundColor: `${colors.success}18` },
+  publishedBadge: { backgroundColor: colors.successFaded },
   draftBadge: { backgroundColor: `${colors.textMuted}18` },
-  marketplaceBadgeText: { fontSize: fontSize.xs, fontWeight: '600' },
+  marketplaceBadgeText: { fontSize: fontSize.xs, fontWeight: '700' },
   publishedText: { color: colors.success },
   draftText: { color: colors.textMuted },
   metaText: {
-    fontSize: fontSize.sm,
+    fontSize: fontSize.xs,
     color: colors.textMuted,
+    fontWeight: '500',
   },
   metaActions: {
     flexDirection: 'row',
@@ -351,55 +410,99 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   assignBtn: {
-    backgroundColor: `${colors.primary}14`,
+    backgroundColor: colors.accentFaded,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.xs + 1,
     borderRadius: borderRadius.full,
   },
   assignBtnText: {
-    color: colors.primary,
+    color: colors.accent,
     fontSize: fontSize.xs,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   deleteText: {
     color: colors.error,
     fontSize: fontSize.xs,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   duplicateBtn: {
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
     borderRadius: borderRadius.sm,
     borderWidth: 1,
-    borderColor: colors.accent,
+    borderColor: colors.border,
     minWidth: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
   duplicateBtnText: {
-    color: colors.accent,
+    color: colors.textSecondary,
     fontSize: fontSize.xs,
     fontWeight: '600',
   },
   badge: {
     paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: borderRadius.full,
   },
   badgeText: {
     fontSize: fontSize.xs,
-    fontWeight: '600',
+    fontWeight: '700',
     textTransform: 'capitalize',
+    letterSpacing: 0.2,
   },
   progressPill: {
-    backgroundColor: `${colors.success}18`,
+    backgroundColor: colors.accentFaded,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     borderRadius: borderRadius.full,
   },
   progressText: {
-    color: colors.success,
+    color: colors.accent,
     fontSize: fontSize.xs,
-    fontWeight: '600',
+    fontWeight: '700',
   },
+
+  // ── Client program card ────────────────────────────────────────────────────
+  clientCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.xl,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.07,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  clientCardStrip: { height: 5 },
+  clientCardBody: { padding: spacing.xl, gap: spacing.md },
+  clientProgressBlock: { gap: spacing.xs },
+  clientProgressRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  clientProgressLabel: { fontSize: fontSize.sm, fontWeight: '600', color: colors.textSecondary },
+  clientProgressPct: { fontSize: fontSize.sm, fontWeight: '800' },
+  clientProgressTrack: {
+    height: 8,
+    backgroundColor: colors.surfaceLight,
+    borderRadius: 4,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  clientProgressFill: { height: '100%', borderRadius: 4 },
+  clientContinueBtn: {
+    borderRadius: borderRadius.full,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.22,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  clientContinueBtnText: { color: '#fff', fontSize: fontSize.sm, fontWeight: '800', letterSpacing: 0.3 },
 });

@@ -155,7 +155,12 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: colors.card,
     borderRadius: borderRadius.lg,
-    padding: spacing.md,
+    padding: spacing.lg,
+    shadowColor: '#1A1A2E',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
 
   // Header
@@ -163,25 +168,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.md,
+    marginBottom: spacing.lg,
     paddingHorizontal: spacing.xs,
   },
   navBtn: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: colors.surfaceLight,
+    borderRadius: borderRadius.sm,
   },
   navIcon: {
-    fontSize: 22,
-    color: colors.primary,
-    fontWeight: '600',
-    lineHeight: 26,
+    fontSize: 20,
+    color: colors.text,
+    fontWeight: '700',
+    lineHeight: 24,
   },
   monthTitle: {
     fontSize: fontSize.md,
     fontWeight: '700',
     color: colors.text,
+    letterSpacing: 0.2,
   },
 
   // Day headers row
@@ -190,15 +198,16 @@ const styles = StyleSheet.create({
   },
   dayHeaderCell: {
     flex: 1,
-    height: 28,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
   dayHeaderText: {
     fontSize: fontSize.xs,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.textMuted,
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 
   // Day cells
@@ -211,17 +220,16 @@ const styles = StyleSheet.create({
     marginVertical: 2,
   },
   cellSelected: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.accent,
   },
   cellToday: {
-    borderWidth: 1.5,
-    borderColor: colors.primary,
+    backgroundColor: colors.accentFaded,
   },
   cellDisabled: {
-    opacity: 0.3,
+    opacity: 0.25,
   },
   cellPast: {
-    opacity: 0.35,
+    opacity: 0.38,
   },
   cellText: {
     fontSize: fontSize.sm,
@@ -233,7 +241,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   cellTextToday: {
-    color: colors.primary,
+    color: colors.accent,
     fontWeight: '700',
   },
   cellTextDisabled: {
@@ -247,7 +255,7 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.accent,
   },
   dotSelected: {
     backgroundColor: colors.textInverse,

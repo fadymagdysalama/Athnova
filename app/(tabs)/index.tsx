@@ -11,19 +11,22 @@ import { colors, fontSize, spacing, borderRadius } from '../../src/constants/the
 function StatCard({
   label,
   value,
-  icon,
+  accent = false,
   onPress,
 }: {
   label: string;
   value: string;
-  icon: string;
+  accent?: boolean;
   onPress: () => void;
 }) {
   return (
-    <TouchableOpacity style={styles.statCard} onPress={onPress} activeOpacity={0.8}>
-      <Text style={styles.statIcon}>{icon}</Text>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+    <TouchableOpacity
+      style={[styles.statCard, accent && styles.statCardAccent]}
+      onPress={onPress}
+      activeOpacity={0.8}
+    >
+      <Text style={[styles.statValue, accent && styles.statValueAccent]}>{value}</Text>
+      <Text style={[styles.statLabel, accent && styles.statLabelAccent]}>{label}</Text>
     </TouchableOpacity>
   );
 }
@@ -256,7 +259,11 @@ export default function HomeScreen() {
               onPress={() => router.push('/notifications')}
               activeOpacity={0.7}
             >
-              <Text style={styles.bellIcon}>🔔</Text>
+              <View style={styles.bellInner}>
+                <View style={styles.bellDome} />
+                <View style={styles.bellBase} />
+                <View style={styles.bellKnocker} />
+              </View>
               {unreadCount > 0 && (
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>
@@ -272,13 +279,12 @@ export default function HomeScreen() {
           <StatCard
             label={stats?.primaryLabel ?? (isCoach ? t('home.activeClients') : t('home.activePrograms'))}
             value={String(stats?.primaryCount ?? 0)}
-            icon={isCoach ? '👥' : '📋'}
+            accent
             onPress={() => router.push(isCoach ? '/(tabs)/clients' : '/(tabs)/programs')}
           />
           <StatCard
             label={stats?.secondaryLabel ?? (isCoach ? t('home.activePrograms') : 'Workouts')}
             value={String(stats?.secondaryCount ?? 0)}
-            icon={isCoach ? '📋' : '🔥'}
             onPress={() => router.push(isCoach ? '/(tabs)/programs' : '/(tabs)/progress')}
           />
         </View>
@@ -368,7 +374,7 @@ export default function HomeScreen() {
                     <View style={styles.workoutExerciseList}>
                       {todayWorkout.exercises.map((ex, i) => (
                         <View key={i} style={styles.workoutExerciseRow}>
-                          <Text style={styles.workoutExerciseDot}>·</Text>
+                          <View style={styles.workoutExerciseDot} />
                           <Text style={styles.workoutExerciseName}>{ex.exercise_name}</Text>
                           <Text style={styles.workoutExerciseMeta}>{ex.sets}×{ex.reps}</Text>
                         </View>
@@ -421,17 +427,49 @@ const styles = StyleSheet.create({
     paddingRight: spacing.md,
   },
   bellButton: {
-    position: 'relative',
     width: 44,
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: borderRadius.md,
+    borderRadius: borderRadius.sm,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
+    position: 'relative',
   },
-  bellIcon: { fontSize: 20 },
+  bellInner: {
+    width: 20,
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 1,
+  },
+  // dome arc — top of the bell
+  bellDome: {
+    width: 14,
+    height: 10,
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+    borderWidth: 2,
+    borderBottomWidth: 0,
+    borderColor: colors.accent,
+  },
+  // solid brim — the wide base rim of the bell
+  bellBase: {
+    width: 18,
+    height: 3,
+    backgroundColor: colors.accent,
+    borderRadius: 1.5,
+    marginTop: -1,
+  },
+  // knocker — small circle hanging below
+  bellKnocker: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: colors.accent,
+    marginTop: 2,
+  },
   badge: {
     position: 'absolute',
     top: -4,
@@ -449,18 +487,20 @@ const styles = StyleSheet.create({
   badgeText: {
     color: '#fff',
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '800',
     lineHeight: 13,
   },
   greeting: {
     fontSize: fontSize['2xl'],
-    fontWeight: '700',
+    fontWeight: '800',
     color: colors.text,
+    letterSpacing: -0.5,
   },
   dashboardLabel: {
-    fontSize: fontSize.md,
-    color: colors.textSecondary,
+    fontSize: fontSize.sm,
+    color: colors.textMuted,
     marginTop: spacing.xs,
+    fontWeight: '500',
   },
   statsRow: {
     flexDirection: 'row',
@@ -475,29 +515,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.border,
+    shadowColor: '#1A1A2E',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  statIcon: {
-    fontSize: 28,
-    marginBottom: spacing.sm,
+  statCardAccent: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
   },
   statValue: {
-    fontSize: fontSize['2xl'],
-    fontWeight: '700',
+    fontSize: fontSize['3xl'],
+    fontWeight: '800',
     color: colors.text,
+    letterSpacing: -1,
+  },
+  statValueAccent: {
+    color: colors.textInverse,
   },
   statLabel: {
     fontSize: fontSize.xs,
     color: colors.textMuted,
     marginTop: spacing.xs,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  statLabelAccent: {
+    color: 'rgba(255,255,255,0.8)',
   },
   section: {
     marginBottom: spacing['2xl'],
   },
   sectionTitle: {
-    fontSize: fontSize.lg,
-    fontWeight: '600',
+    fontSize: fontSize.md,
+    fontWeight: '700',
     color: colors.text,
     marginBottom: spacing.md,
+    letterSpacing: 0.1,
   },
   emptyCard: {
     backgroundColor: colors.surface,
@@ -514,19 +569,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: spacing.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 3,
+    shadowColor: '#1A1A2E',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   sessionCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   sessionCalendarBadge: {
-    width: 58,
-    height: 64,
+    width: 56,
+    height: 60,
     borderRadius: borderRadius.md,
     backgroundColor: colors.primary,
     alignItems: 'center',
@@ -540,24 +595,25 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   sessionCalendarMonth: {
-    fontSize: fontSize.xs,
+    fontSize: 10,
     fontWeight: '700',
-    color: colors.textInverse,
+    color: 'rgba(255,255,255,0.7)',
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
     marginTop: 2,
   },
   sessionContent: {
     flex: 1,
   },
   sessionDate: {
-    fontSize: fontSize.md,
+    fontSize: fontSize.sm,
     fontWeight: '700',
     color: colors.text,
   },
   sessionTime: {
     fontSize: fontSize.md,
     fontWeight: '700',
-    color: colors.primary,
+    color: colors.accent,
     marginTop: 2,
   },
   sessionNotes: {
@@ -572,6 +628,11 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     borderWidth: 1,
     borderColor: colors.border,
+    shadowColor: '#1A1A2E',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   workoutCardHeader: {
     flexDirection: 'row',
@@ -585,7 +646,7 @@ const styles = StyleSheet.create({
   },
   workoutDayMeta: {
     fontSize: fontSize.sm,
-    color: colors.primary,
+    color: colors.accent,
     fontWeight: '600',
     marginTop: 2,
   },
@@ -596,33 +657,41 @@ const styles = StyleSheet.create({
   },
   workoutExerciseList: {
     gap: spacing.xs,
+    marginTop: spacing.sm,
   },
   workoutExerciseRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   workoutExerciseDot: {
-    width: 14,
-    fontSize: fontSize.lg,
-    color: colors.primary,
-    fontWeight: '700',
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.accent,
   },
   workoutExerciseName: {
     flex: 1,
     fontSize: fontSize.sm,
     color: colors.text,
+    fontWeight: '500',
   },
   workoutExerciseMeta: {
     fontSize: fontSize.xs,
     color: colors.textMuted,
-    fontWeight: '500',
+    fontWeight: '600',
+    backgroundColor: colors.surfaceLight,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
   },
   workoutMoreText: {
     fontSize: fontSize.xs,
     color: colors.textMuted,
     fontStyle: 'italic',
     marginTop: spacing.xs,
+    marginLeft: spacing.lg,
   },
   programCard: {
     backgroundColor: colors.card,
@@ -631,34 +700,43 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: spacing.sm,
+    shadowColor: '#1A1A2E',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
   programCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
   },
   programCardTitle: {
     flex: 1,
     fontSize: fontSize.md,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.text,
     marginRight: spacing.sm,
   },
   programCardDay: {
-    fontSize: fontSize.sm,
-    fontWeight: '600',
-    color: colors.primary,
+    fontSize: fontSize.xs,
+    fontWeight: '700',
+    color: colors.accent,
+    backgroundColor: colors.accentFaded,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: borderRadius.full,
   },
   progressTrack: {
-    height: 6,
+    height: 5,
     backgroundColor: colors.borderLight,
     borderRadius: 3,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    backgroundColor: colors.primary,
+    backgroundColor: colors.accent,
     borderRadius: 3,
   },
   emptyIcon: {
@@ -668,7 +746,7 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: fontSize.md,
     color: colors.textSecondary,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   emptySubtext: {
     fontSize: fontSize.sm,

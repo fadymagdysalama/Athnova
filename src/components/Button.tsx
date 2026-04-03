@@ -12,7 +12,7 @@ import { colors, borderRadius, fontSize, spacing } from '../constants/theme';
 interface ButtonProps {
   title: string;
   onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'accent';
   size?: 'sm' | 'md' | 'lg';
   loading?: boolean;
   disabled?: boolean;
@@ -31,12 +31,16 @@ export function Button({
   textStyle,
 }: ButtonProps) {
   const isDisabled = disabled || loading;
+  const loaderColor =
+    variant === 'outline' || variant === 'ghost' || variant === 'secondary'
+      ? colors.primary
+      : colors.textInverse;
 
   return (
     <TouchableOpacity
       onPress={onPress}
       disabled={isDisabled}
-      activeOpacity={0.8}
+      activeOpacity={0.78}
       style={[
         styles.base,
         styles[variant],
@@ -46,10 +50,7 @@ export function Button({
       ]}
     >
       {loading ? (
-        <ActivityIndicator
-          color={variant === 'outline' || variant === 'ghost' ? colors.primary : colors.text}
-          size="small"
-        />
+        <ActivityIndicator color={loaderColor} size="small" />
       ) : (
         <Text
           style={[
@@ -70,13 +71,18 @@ const styles = StyleSheet.create({
   base: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: borderRadius.md,
+    borderRadius: borderRadius.full,
   },
   primary: {
     backgroundColor: colors.primary,
   },
+  accent: {
+    backgroundColor: colors.accent,
+  },
   secondary: {
     backgroundColor: colors.surfaceLight,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   outline: {
     backgroundColor: 'transparent',
@@ -92,7 +98,7 @@ const styles = StyleSheet.create({
     minHeight: 36,
   },
   size_md: {
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.md + 1,
     paddingHorizontal: spacing.xl,
     minHeight: 48,
   },
@@ -102,13 +108,17 @@ const styles = StyleSheet.create({
     minHeight: 56,
   },
   disabled: {
-    opacity: 0.5,
+    opacity: 0.45,
   },
   text: {
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   text_primary: {
-    color: colors.text,
+    color: colors.textInverse,
+  },
+  text_accent: {
+    color: colors.textInverse,
   },
   text_secondary: {
     color: colors.text,
@@ -117,7 +127,7 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   text_ghost: {
-    color: colors.primary,
+    color: colors.accent,
   },
   textSize_sm: {
     fontSize: fontSize.sm,
