@@ -21,7 +21,6 @@ interface TierConfig {
   id: SubscriptionTier;
   nameKey: string;
   priceKey: string;
-  descKey: string;
   features: string[];
   highlighted: boolean;
   color: string;
@@ -38,11 +37,8 @@ const TIERS: TierConfig[] = [
     id: 'starter',
     nameKey: 'subscription.starterName',
     priceKey: 'subscription.starterPrice',
-    descKey: 'subscription.starterDesc',
     features: [
       'subscription.starterFeature1',
-      'subscription.starterFeature2',
-      'subscription.starterFeature3',
     ],
     highlighted: false,
     color: colors.textSecondary,
@@ -51,12 +47,8 @@ const TIERS: TierConfig[] = [
     id: 'pro',
     nameKey: 'subscription.proName',
     priceKey: 'subscription.proPrice',
-    descKey: 'subscription.proDesc',
     features: [
       'subscription.proFeature1',
-      'subscription.proFeature2',
-      'subscription.proFeature3',
-      'subscription.proFeature4',
     ],
     highlighted: true,
     color: colors.primary,
@@ -65,13 +57,8 @@ const TIERS: TierConfig[] = [
     id: 'business',
     nameKey: 'subscription.businessName',
     priceKey: 'subscription.businessPrice',
-    descKey: 'subscription.businessDesc',
     features: [
       'subscription.businessFeature1',
-      'subscription.businessFeature2',
-      'subscription.businessFeature3',
-      'subscription.businessFeature4',
-      'subscription.businessFeature5',
     ],
     highlighted: false,
     color: colors.accent,
@@ -236,7 +223,6 @@ export default function SubscriptionScreen() {
                   <Text style={[styles.tierName, { color: tier.color }]}>
                     {t(tier.nameKey as any)}
                   </Text>
-                  <Text style={styles.tierDesc}>{t(tier.descKey as any)}</Text>
                 </View>
                 <View style={styles.tierPriceBlock}>
                   <Text style={[styles.tierPrice, { color: tier.color }]}>
@@ -284,7 +270,6 @@ export default function SubscriptionScreen() {
         })}
 
         <View style={styles.recurringBanner}>
-          <Text style={styles.recurringIcon}>🔄</Text>
           <Text style={styles.recurringText}>{t('subscription.recurringNotice')}</Text>
         </View>
 

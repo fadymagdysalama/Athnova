@@ -168,7 +168,7 @@ export default function MarketplaceDetailScreen() {
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <Text style={styles.statValue}>
-                {isFree ? 'Free' : `$${program.price!.toFixed(2)}`}
+                {isFree ? 'Free' : `EGP ${program.price!.toFixed(2)}`}
               </Text>
               <Text style={styles.statLabel}>Price</Text>
             </View>

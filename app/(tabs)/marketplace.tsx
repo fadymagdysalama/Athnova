@@ -56,7 +56,7 @@ function ProgramCard({
       <View style={styles.cardFooter}>
         <Text style={styles.priceText}>
           {program.price && program.price > 0
-            ? `$${program.price.toFixed(2)}`
+            ? `EGP ${program.price.toFixed(2)}`
             : t('marketplace.getFree')}
         </Text>
         <View style={[styles.actionBtn, purchased && styles.actionBtnOwned]}>

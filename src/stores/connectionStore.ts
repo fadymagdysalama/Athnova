@@ -70,7 +70,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: 'Not authenticated' };
 
-    const CLIENT_LIMITS: Record<string, number> = { starter: 1, pro: 2, business: Infinity };
+    const CLIENT_LIMITS: Record<string, number> = { starter: 5, pro: 15, business: Infinity };
 
     const { data: subData } = await supabase
       .from('coach_subscriptions')
