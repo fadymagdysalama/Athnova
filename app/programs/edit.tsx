@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Alert, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform,
+  ActivityIndicator, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -15,6 +15,7 @@ import { useProgramStore } from '../../src/stores/programStore';
 import { supabase } from '../../src/lib/supabase';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 import { ExerciseLibraryDrawer } from '../../src/components/ExerciseLibraryDrawer';
+import { AppAlert, useAppAlert } from '../../src/components/AppAlert';
 import type { ExerciseTemplate } from '../../src/types';
 
 interface ExerciseDraft {
@@ -85,9 +86,11 @@ export default function EditProgramScreen() {
   const [saving, setSaving] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [isCoachOnly, setIsCoachOnly] = useState(false);
   const [days, setDays] = useState<DayDraft[]>([]);
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [libraryDayId, setLibraryDayId] = useState<string | null>(null);
+  const { alertProps, showAlert } = useAppAlert();
 
   useEffect(() => {
     if (id) fetchProgramWithDays(id);
@@ -97,6 +100,7 @@ export default function EditProgramScreen() {
     if (!currentProgram) return;
     setTitle(currentProgram.title);
     setDescription(currentProgram.description ?? '');
+    setIsCoachOnly(!!(currentProgram as any).is_coach_only);
     const drafts: DayDraft[] = (currentProgram.days ?? []).map((day) => ({
       id: day.id,
       day_number: day.day_number,
@@ -151,7 +155,7 @@ export default function EditProgramScreen() {
   const removeLocal = async (dayId: string, exKey: string, exId: string | null) => {
     if (exId) {
       const { error } = await deleteExercise(exId);
-      if (error) { Alert.alert(t('common.error'), error); return; }
+      if (error) { showAlert({ title: t('common.error'), message: error }); return; }
     }
     setDays((prev) =>
       prev.map((d) =>
@@ -216,11 +220,11 @@ export default function EditProgramScreen() {
   };
 
   const handleSave = async () => {
-    if (!title.trim()) return Alert.alert(t('common.error'), t('programs.programNameRequired'));
+    if (!title.trim()) { showAlert({ title: t('common.error'), message: t('programs.programNameRequired') }); return; }
     setSaving(true);
 
-    const { error: progErr } = await updateProgram(id!, { title: title.trim(), description: description.trim() });
-    if (progErr) { setSaving(false); return Alert.alert(t('common.error'), progErr); }
+    const { error: progErr } = await updateProgram(id!, { title: title.trim(), description: description.trim(), is_coach_only: isCoachOnly });
+    if (progErr) { setSaving(false); showAlert({ title: t('common.error'), message: progErr }); return; }
 
     for (const day of days) {
       // Persist reordered day_number
@@ -513,6 +517,7 @@ export default function EditProgramScreen() {
           if (libraryDayId) addLocal(libraryDayId, template);
         }}
       />
+      <AppAlert {...alertProps} />
     </KeyboardAvoidingView>
   );
 }
@@ -585,6 +590,43 @@ const styles = StyleSheet.create({
     fontSize: fontSize.md, color: colors.text,
   },
   textarea: { minHeight: 72, textAlignVertical: 'top' },
+
+  // ── Coach-only / privacy toggle ───────────────────────────────────────────
+  coachOnlyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  coachOnlyRowActive: { borderColor: colors.primary, backgroundColor: colors.accentFaded },
+  coachOnlyText: { flex: 1 },
+  coachOnlyTitle: { fontSize: fontSize.md, fontWeight: '700', color: colors.text },
+  coachOnlyDesc: { fontSize: fontSize.sm, color: colors.textMuted, marginTop: 2 },
+  coachOnlyToggle: {
+    width: 46,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.border,
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  coachOnlyToggleOn: { backgroundColor: colors.primary },
+  coachOnlyThumb: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  coachOnlyThumbOn: { alignSelf: 'flex-end' },
 
   // Segmented difficulty control
   segmentTrack: {

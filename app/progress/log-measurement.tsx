@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -13,6 +12,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { TextInput } from '../../src/components/TextInput';
 import { Button } from '../../src/components/Button';
+import { AppAlert, useAppAlert } from '../../src/components/AppAlert';
 import { useProgressStore } from '../../src/stores/progressStore';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 
@@ -35,6 +35,7 @@ export default function LogMeasurementScreen() {
   const [muscleMass, setMuscleMass] = useState('');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
+  const { alertProps, showAlert } = useAppAlert();
 
   const handleSave = async () => {
     const weightNum = weight ? parseFloat(weight) : null;
@@ -42,7 +43,7 @@ export default function LogMeasurementScreen() {
     const muscleMassNum = muscleMass ? parseFloat(muscleMass) : null;
 
     if (!weightNum && !bodyFatNum && !muscleMassNum) {
-      Alert.alert(t('common.error'), t('progress.atLeastOne'));
+      showAlert({ title: t('common.error'), message: t('progress.atLeastOne') });
       return;
     }
 
@@ -57,7 +58,7 @@ export default function LogMeasurementScreen() {
     setLoading(false);
 
     if (error) {
-      Alert.alert(t('common.error'), error);
+      showAlert({ title: t('common.error'), message: error });
     } else {
       router.back();
     }
@@ -128,6 +129,7 @@ export default function LogMeasurementScreen() {
           size="lg"
         />
       </ScrollView>
+      <AppAlert {...alertProps} />
     </KeyboardAvoidingView>
   );
 }

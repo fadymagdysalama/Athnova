@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   Image,
   Modal,
@@ -16,6 +15,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useProgressStore } from '../../src/stores/progressStore';
+import { AppAlert, useAppAlert } from '../../src/components/AppAlert';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 
 type Label = 'front' | 'side' | 'back' | 'other';
@@ -36,6 +36,7 @@ export default function PhotosScreen() {
   const [uploading, setUploading] = useState(false);
   const [selectedLabel, setSelectedLabel] = useState<Label>('front');
   const [fullscreenPhoto, setFullscreenPhoto] = useState<{ url: string; label: string; date: string } | null>(null);
+  const { alertProps, showAlert } = useAppAlert();
 
   useEffect(() => { fetchPhotos(); }, []);
 
@@ -49,12 +50,12 @@ export default function PhotosScreen() {
   const handlePickPhoto = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert(t('common.error'), 'Camera roll permission is required to upload photos.');
+      showAlert({ title: t('common.error'), message: 'Camera roll permission is required to upload photos.' });
       return;
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: 'images',
       allowsEditing: false,
       quality: 0.8,
     });
@@ -68,22 +69,26 @@ export default function PhotosScreen() {
     setUploading(false);
 
     if (error) {
-      Alert.alert(t('common.error'), error);
+      showAlert({ title: t('common.error'), message: error });
     }
   };
 
   const handleDelete = (id: string, url: string) => {
-    Alert.alert(t('progress.deleteEntry'), t('progress.deleteConfirm'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.delete'),
-        style: 'destructive',
-        onPress: async () => {
-          const { error } = await deletePhoto(id, url);
-          if (error) Alert.alert(t('common.error'), error);
+    showAlert({
+      title: t('progress.deleteEntry'),
+      message: t('progress.deleteConfirm'),
+      buttons: [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.delete'),
+          style: 'destructive',
+          onPress: async () => {
+            const { error } = await deletePhoto(id, url);
+            if (error) showAlert({ title: t('common.error'), message: error });
+          },
         },
-      },
-    ]);
+      ],
+    });
   };
 
   const labelKey = (label: string) =>
@@ -200,6 +205,7 @@ export default function PhotosScreen() {
           </>
         )}
       </ScrollView>
+      <AppAlert {...alertProps} />
     </View>
   );
 }

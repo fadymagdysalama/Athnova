@@ -9,11 +9,16 @@ import type {
   ProgramWithDays,
   ProgramDayWithExercises,
   ClientFeedback,
+  CoachAssignment,
 } from '../types';
 
 interface ProgramState {
   // Coach
   myPrograms: Program[];
+  // Coach: all assignments to clients (for Active tab)
+  coachAssignments: CoachAssignment[];
+  // Coach: offline client assignment counts per program_id
+  offlineAssignmentCounts: Record<string, number>;
   // Client
   assignments: (ProgramAssignment & { program: ProgramWithDays })[];
   // Shared - currently viewed program
@@ -25,14 +30,17 @@ interface ProgramState {
 
   // Coach actions
   fetchMyPrograms: () => Promise<void>;
+  fetchCoachAssignments: () => Promise<void>;
   createProgram: (data: {
     title: string;
     description: string;
     duration_days: number;
     type: 'private' | 'public';
+    tags?: string[];
+    is_coach_only?: boolean;
   }) => Promise<{ id: string | null; error: string | null }>;
   deleteProgram: (id: string) => Promise<{ error: string | null }>;
-  updateProgram: (id: string, data: { title: string; description: string }) => Promise<{ error: string | null }>;
+  updateProgram: (id: string, data: { title: string; description: string; is_coach_only?: boolean }) => Promise<{ error: string | null }>;
   addDay: (programId: string, dayNumber: number) => Promise<{ id: string | null; error: string | null }>;
   addExercise: (
     dayId: string,
@@ -40,9 +48,14 @@ interface ProgramState {
   ) => Promise<{ id: string | null; error: string | null }>;
   deleteExercise: (id: string) => Promise<{ error: string | null }>;
   updateExercise: (id: string, data: { exercise_name: string; sets: number; reps: string; rest_time: string; notes: string; video_url?: string; order_index: number; superset_group?: number | null; weight?: string | null }) => Promise<{ error: string | null }>;
-  assignProgram: (programId: string, clientId: string) => Promise<{ error: string | null }>;
+  assignProgram: (programId: string, clientId: string, clientVisible?: boolean) => Promise<{ error: string | null }>;
   unassignProgram: (programId: string, clientId: string) => Promise<{ error: string | null }>;
-  fetchProgramAssignments: (programId: string) => Promise<string[]>; // returns clientIds
+  fetchProgramAssignments: (programId: string) => Promise<{ clientId: string; clientVisible: boolean }[]>;
+  updateAssignmentVisibility: (programId: string, clientId: string, clientVisible: boolean) => Promise<{ error: string | null }>;
+  assignProgramToOffline: (programId: string, offlineClientId: string, clientVisible?: boolean) => Promise<{ error: string | null }>;
+  unassignProgramFromOffline: (programId: string, offlineClientId: string) => Promise<{ error: string | null }>;
+  fetchOfflineProgramAssignments: (programId: string) => Promise<{ clientId: string; clientVisible: boolean }[]>;
+  updateOfflineAssignmentVisibility: (programId: string, offlineClientId: string, clientVisible: boolean) => Promise<{ error: string | null }>;
   duplicateProgram: (id: string) => Promise<{ id: string | null; error: string | null }>;
   reorderDay: (programId: string, dayId: string, direction: 'up' | 'down') => Promise<{ error: string | null }>;
 
@@ -63,6 +76,8 @@ interface ProgramState {
 
 export const useProgramStore = create<ProgramState>((set, get) => ({
   myPrograms: [],
+  coachAssignments: [],
+  offlineAssignmentCounts: {},
   assignments: [],
   currentProgram: null,
   completedDayIds: new Set<string>(),
@@ -80,7 +95,80 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
       .eq('creator_id', user.id)
       .order('created_at', { ascending: false });
 
-    set({ myPrograms: data ?? [], isLoading: false });
+    const unique = (data ?? []).filter((p, i, arr) => arr.findIndex((q) => q.id === p.id) === i);
+    set({ myPrograms: unique as Program[], isLoading: false });
+  },
+
+  // ─── Coach: fetch all assignments across their programs (Active tab) ──────
+  fetchCoachAssignments: async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // Fetch assignments joined with program + client profile
+    const { data } = await supabase
+      .from('program_assignments')
+      .select(`
+        id,
+        program_id,
+        current_day,
+        started_at,
+        program:programs!program_assignments_program_id_fkey(
+          id, title, duration_days, creator_id
+        ),
+        client:profiles!program_assignments_client_id_fkey(
+          id, display_name, username, avatar_url, role, language, created_at
+        )
+      `)
+      .order('started_at', { ascending: false });
+
+    if (!data) return;
+
+    // Keep only assignments for programs this coach owns
+    const coachRows = (data as any[]).filter(
+      (r) => r.program?.creator_id === user.id
+    );
+
+    // Fetch completed-day counts in one query
+    const programIds = [...new Set(coachRows.map((r) => r.program_id as string))];
+    const clientIds  = [...new Set(coachRows.map((r) => r.client?.id).filter((id): id is string => !!id))];
+
+    let completedMap: Record<string, Record<string, number>> = {};
+    if (programIds.length && clientIds.length) {
+      const { data: logs } = await supabase
+        .from('workout_logs')
+        .select('program_id, client_id')
+        .in('program_id', programIds)
+        .in('client_id', clientIds);
+
+      for (const log of (logs ?? []) as any[]) {
+        if (!completedMap[log.client_id]) completedMap[log.client_id] = {};
+        completedMap[log.client_id][log.program_id] =
+          (completedMap[log.client_id][log.program_id] ?? 0) + 1;
+      }
+    }
+
+    const result: CoachAssignment[] = coachRows.map((r) => ({
+      assignment_id: r.id,
+      program_id: r.program_id,
+      program_title: r.program?.title ?? '',
+      program_duration_days: r.program?.duration_days ?? 0,
+      current_day: r.current_day,
+      started_at: r.started_at,
+      completed_days: completedMap[r.client?.id]?.[r.program_id] ?? 0,
+      client: r.client,
+    }));
+
+    // Fetch offline client assignment counts per program
+    const { data: offlineRows } = await supabase
+      .from('offline_program_assignments')
+      .select('program_id, offline_client_id')
+      .eq('assigned_by', user.id);
+    const offlineAssignmentCounts: Record<string, number> = {};
+    for (const row of (offlineRows ?? []) as Array<{ program_id: string }>) {
+      offlineAssignmentCounts[row.program_id] = (offlineAssignmentCounts[row.program_id] ?? 0) + 1;
+    }
+
+    set({ coachAssignments: result, offlineAssignmentCounts });
   },
 
   // ─── Coach: create a new program ─────────────────────────────────────────
@@ -96,7 +184,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
 
     if (error) return { id: null, error: error.message };
 
-    set((s) => ({ myPrograms: [program, ...s.myPrograms] }));
+    set((s) => ({ myPrograms: [program, ...s.myPrograms.filter((p) => p.id !== program.id)] }));
     return { id: program.id, error: null };
   },
 
@@ -112,6 +200,8 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
   updateProgram: async (id, data) => {
     const { error } = await supabase.from('programs').update(data).eq('id', id);
     if (error) return { error: error.message };
+    // Note: when is_coach_only changes, the DB trigger `sync_assignment_visibility`
+    // automatically cascades client_visible to all program_assignments rows.
     set((s) => ({
       myPrograms: s.myPrograms.map((p) => p.id === id ? { ...p, ...data } : p),
       currentProgram: s.currentProgram?.id === id ? { ...s.currentProgram, ...data } : s.currentProgram,
@@ -156,12 +246,12 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
   },
 
   // ─── Coach: assign program to client ─────────────────────────────────────
-  assignProgram: async (programId, clientId) => {
+  assignProgram: async (programId, clientId, clientVisible = true) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: 'Not authenticated' };
 
     const { error } = await supabase.from('program_assignments').upsert(
-      { program_id: programId, client_id: clientId, assigned_by: user.id, current_day: 1 },
+      { program_id: programId, client_id: clientId, assigned_by: user.id, current_day: 1, client_visible: clientVisible },
       { onConflict: 'program_id,client_id' }
     );
     if (!error) {
@@ -189,13 +279,63 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
     return { error: error?.message ?? null };
   },
 
-  // ─── Coach: get clientIds already assigned to a program ──────────────────
+  // ─── Coach: get clients already assigned to a program (with visibility) ──
   fetchProgramAssignments: async (programId) => {
     const { data } = await supabase
       .from('program_assignments')
-      .select('client_id')
+      .select('client_id, client_visible')
       .eq('program_id', programId);
-    return (data ?? []).map((r: any) => r.client_id);
+    return (data ?? []).map((r: any) => ({ clientId: r.client_id, clientVisible: r.client_visible as boolean }));
+  },
+
+  // ─── Coach: update visibility of an existing online assignment ───────────
+  updateAssignmentVisibility: async (programId, clientId, clientVisible) => {
+    const { error } = await supabase
+      .from('program_assignments')
+      .update({ client_visible: clientVisible })
+      .eq('program_id', programId)
+      .eq('client_id', clientId);
+    return { error: error?.message ?? null };
+  },
+
+  // ─── Coach: assign program to offline client ─────────────────────────────
+  assignProgramToOffline: async (programId, offlineClientId, clientVisible = true) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: 'Not authenticated' };
+    const { error } = await supabase.from('offline_program_assignments').upsert(
+      { program_id: programId, offline_client_id: offlineClientId, assigned_by: user.id, current_day: 1, client_visible: clientVisible },
+      { onConflict: 'program_id,offline_client_id' }
+    );
+    return { error: error?.message ?? null };
+  },
+
+  // ─── Coach: unassign program from offline client ──────────────────────────
+  unassignProgramFromOffline: async (programId, offlineClientId) => {
+    const { error } = await supabase
+      .from('offline_program_assignments')
+      .delete()
+      .eq('program_id', programId)
+      .eq('offline_client_id', offlineClientId);
+    return { error: error?.message ?? null };
+  },
+
+  // ─── Coach: get offline clients assigned to a program (with visibility) ──
+  fetchOfflineProgramAssignments: async (programId) => {
+    const { data } = await supabase
+      .from('offline_program_assignments')
+      .select('offline_client_id, client_visible')
+      .eq('program_id', programId);
+    return (data ?? []).map((r: any) => ({ clientId: r.offline_client_id, clientVisible: r.client_visible as boolean }));
+  },
+
+  // ─── Coach: update visibility of an existing offline assignment ───────────
+  updateOfflineAssignmentVisibility: async (programId, offlineClientId, clientVisible) => {
+    const { error } = await supabase
+      .from('offline_program_assignments')
+      .update({ client_visible: clientVisible })
+      .eq('program_id', programId)
+      .eq('offline_client_id', offlineClientId);
+    return { error: error?.message ?? null };
   },
 
   // ─── Coach: duplicate a program (new id, copied days + exercises) ─────────
@@ -223,6 +363,8 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
         type: orig.type,
         price: orig.price,
         is_published: false,
+        is_coach_only: orig.is_coach_only ?? false,
+        tags: orig.tags ?? [],
       })
       .select()
       .single();
@@ -265,7 +407,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
       }
     }
 
-    set((s) => ({ myPrograms: [newProg, ...s.myPrograms] }));
+    set((s) => ({ myPrograms: [newProg, ...s.myPrograms.filter((p) => p.id !== newProg.id)] }));
     return { id: newProg.id, error: null };
   },
 
@@ -337,12 +479,16 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
       .from('program_assignments')
       .select('*, program:programs(*)')
       .eq('client_id', user.id)
+      .eq('client_visible', true)
       .order('started_at', { ascending: false });
 
     if (!assignmentRows) return set({ isLoading: false, assignments: [] });
 
     // Filter out rows where the joined program is null (deleted / RLS blocked)
-    const validRows = assignmentRows.filter((row: any) => row.program != null);
+    // Also filter out programs the coach marked as coach-only reference
+    const validRows = assignmentRows.filter(
+      (row: any) => row.program != null && !row.program.is_coach_only
+    );
 
     // Fetch actual completed-day counts from workout_logs
     const { data: logRows } = await supabase

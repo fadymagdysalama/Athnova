@@ -5,13 +5,13 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../src/lib/supabase';
 import { useConnectionStore } from '../../src/stores/connectionStore';
+import { AppAlert, useAppAlert } from '../../src/components/AppAlert';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 import type { Profile } from '../../src/types';
 
@@ -27,11 +27,19 @@ function Avatar({ name, size = 64 }: { name: string; size?: number }) {
 export default function ClientDetailScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { clientId, requestId } = useLocalSearchParams<{ clientId: string; requestId: string }>();
+  const { clientId, requestId, clientMode, coachId } = useLocalSearchParams<{
+    clientId: string;
+    requestId: string;
+    clientMode?: string;
+    coachId?: string;
+  }>();
   const { removeClient } = useConnectionStore();
 
   const [client, setClient] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const { alertProps, showAlert } = useAppAlert();
+
+  const mode = (clientMode === 'offline' ? 'offline' : 'online') as 'online' | 'offline';
 
   useEffect(() => {
     if (!clientId) return;
@@ -48,10 +56,10 @@ export default function ClientDetailScreen() {
 
   const handleRemove = () => {
     if (!requestId || !client) return;
-    Alert.alert(
-      t('connections.removeClient'),
-      client.display_name,
-      [
+    showAlert({
+      title: t('connections.removeClient'),
+      message: client.display_name,
+      buttons: [
         { text: t('common.cancel'), style: 'cancel' },
         {
           text: t('connections.removeClient'),
@@ -59,14 +67,14 @@ export default function ClientDetailScreen() {
           onPress: async () => {
             const { error } = await removeClient(requestId);
             if (error) {
-              Alert.alert(t('common.error'), error);
+              showAlert({ title: t('common.error'), message: error });
             } else {
               router.back();
             }
           },
         },
       ],
-    );
+    });
   };
 
   if (loading) {
@@ -106,8 +114,10 @@ export default function ClientDetailScreen() {
           <Avatar name={client.display_name} size={72} />
           <Text style={styles.displayName}>{client.display_name}</Text>
           <Text style={styles.username}>@{client.username}</Text>
-          <View style={styles.roleTag}>
-            <Text style={styles.roleText}>{t('profile.client')}</Text>
+          <View style={[styles.modeBadge, mode === 'offline' && styles.modeBadgeOffline]}>
+            <Text style={[styles.modeBadgeText, mode === 'offline' && styles.modeBadgeTextOffline]}>
+              {mode === 'online' ? 'Online Client' : 'On Ground Client'}
+            </Text>
           </View>
         </View>
 
@@ -116,7 +126,29 @@ export default function ClientDetailScreen() {
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>{t('connections.clientSince', { date: joinedDate })}</Text>
           </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoSubLabel}>
+              {mode === 'offline'
+                ? 'On Ground clients see their schedule and can chat with you.'
+                : 'Online clients have full access to the app (except the coach schedule).'}
+            </Text>
+          </View>
         </View>
+
+        {/* Chat — available for both online and offline app-connected clients */}
+        {coachId ? (
+          <TouchableOpacity
+            style={styles.chatButton}
+            onPress={() =>
+              router.push({
+                pathname: '/chat/conversation',
+                params: { coachId, clientId, otherName: client.display_name },
+              })
+            }
+          >
+            <Text style={styles.chatButtonText}>💬  Message Client</Text>
+          </TouchableOpacity>
+        ) : null}
 
         {/* Progress */}
         <TouchableOpacity
@@ -138,6 +170,7 @@ export default function ClientDetailScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      <AppAlert {...alertProps} />
     </View>
   );
 }
@@ -207,17 +240,25 @@ const styles = StyleSheet.create({
     fontSize: fontSize.md,
     color: colors.textMuted,
   },
-  roleTag: {
-    backgroundColor: `${colors.primary}18`,
+
+  // Mode badge
+  modeBadge: {
+    backgroundColor: `${colors.success}18`,
     borderRadius: borderRadius.full,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     marginTop: spacing.xs,
   },
-  roleText: {
+  modeBadgeOffline: {
+    backgroundColor: colors.warningFaded,
+  },
+  modeBadgeText: {
     fontSize: fontSize.sm,
-    fontWeight: '600',
-    color: colors.primary,
+    fontWeight: '700',
+    color: colors.success,
+  },
+  modeBadgeTextOffline: {
+    color: colors.warning,
   },
 
   // Info card
@@ -227,6 +268,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     borderWidth: 1,
     borderColor: colors.border,
+    gap: spacing.xs,
   },
   infoRow: {
     paddingVertical: spacing.xs,
@@ -234,6 +276,24 @@ const styles = StyleSheet.create({
   infoLabel: {
     fontSize: fontSize.sm,
     color: colors.textMuted,
+  },
+  infoSubLabel: {
+    fontSize: fontSize.xs,
+    color: colors.textMuted,
+    lineHeight: 18,
+  },
+
+  // Chat button
+  chatButton: {
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.md,
+    padding: spacing.lg,
+    alignItems: 'center',
+  },
+  chatButtonText: {
+    fontSize: fontSize.md,
+    fontWeight: '600',
+    color: colors.textInverse,
   },
 
   // Progress button

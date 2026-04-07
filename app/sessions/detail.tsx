@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
@@ -14,8 +13,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useSessionStore, isWithinNoticeWindow } from '../../src/stores/sessionStore';
+import { AppAlert, useAppAlert } from '../../src/components/AppAlert';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
-import type { Profile } from '../../src/types';
+import type { Profile, OfflineClient } from '../../src/types';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -64,6 +64,20 @@ function ParticipantRow({ participant }: { participant: Profile }) {
   );
 }
 
+function OfflineParticipantRow({ client }: { client: OfflineClient }) {
+  return (
+    <View style={styles.participantRow}>
+      <Avatar name={client.display_name} />
+      <View style={styles.participantInfo}>
+        <Text style={styles.participantName}>{client.display_name}</Text>
+        <View style={styles.offlineBadge}>
+          <Text style={styles.offlineBadgeText}>Offline</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function SessionDetailScreen() {
@@ -81,6 +95,8 @@ export default function SessionDetailScreen() {
   } = useSessionStore();
 
   const isCoach = profile?.role === 'coach';
+  const offlineClients = currentSession?.offlineClients ?? [];
+  const { alertProps, showAlert } = useAppAlert();
 
   useEffect(() => {
     if (sessionId) fetchSessionDetail(sessionId);
@@ -90,10 +106,10 @@ export default function SessionDetailScreen() {
   async function handleCoachCancel() {
     if (!currentSession) return;
 
-    Alert.alert(
-      t('schedule.confirmCancel'),
-      t('schedule.confirmCancelDesc'),
-      [
+    showAlert({
+      title: t('schedule.confirmCancel'),
+      message: t('schedule.confirmCancelDesc'),
+      buttons: [
         { text: t('common.back'), style: 'cancel' },
         {
           text: t('schedule.cancelSession'),
@@ -101,28 +117,27 @@ export default function SessionDetailScreen() {
           onPress: async () => {
             const { error } = await cancelSession(currentSession.id);
             if (error) {
-              Alert.alert(t('common.error'), error);
+              showAlert({ title: t('common.error'), message: error });
             } else {
               router.back();
             }
           },
         },
       ],
-    );
+    });
   }
 
   async function handleClientLeave() {
     if (!currentSession) return;
 
     if (isWithinNoticeWindow(currentSession)) {
-      Alert.alert(t('schedule.cancelNotAllowed'), t('schedule.noticeError'));
+      showAlert({ title: t('schedule.cancelNotAllowed'), message: t('schedule.noticeError') });
       return;
     }
 
-    Alert.alert(
-      t('schedule.confirmLeave'),
-      '',
-      [
+    showAlert({
+      title: t('schedule.confirmLeave'),
+      buttons: [
         { text: t('common.cancel'), style: 'cancel' },
         {
           text: t('schedule.leaveSession'),
@@ -130,14 +145,14 @@ export default function SessionDetailScreen() {
           onPress: async () => {
             const { error } = await cancelAsClient(currentSession.id);
             if (error) {
-              Alert.alert(t('common.error'), error);
+              showAlert({ title: t('common.error'), message: error });
             } else {
               router.back();
             }
           },
         },
       ],
-    );
+    });
   }
 
   if (isLoading || !currentSession) {
@@ -209,7 +224,7 @@ export default function SessionDetailScreen() {
             <View style={styles.capacityPill}>
               <Text style={styles.capacityText}>
                 {session.max_clients != null
-                  ? t('schedule.spots', { count: session.clients.length, max: session.max_clients })
+                  ? t('schedule.spots', { count: session.clients.length + offlineClients.length, max: session.max_clients })
                   : t('schedule.unlimited')}
               </Text>
             </View>
@@ -221,12 +236,19 @@ export default function SessionDetailScreen() {
           <Text style={styles.sectionTitle}>{t('schedule.participants')}</Text>
 
           {isCoach ? (
-            session.clients.length === 0 ? (
+            session.clients.length === 0 && offlineClients.length === 0 ? (
               <View style={styles.emptySection}>
                 <Text style={styles.emptySectionText}>{t('schedule.noParticipants')}</Text>
               </View>
             ) : (
-              session.clients.map((p) => <ParticipantRow key={p.id} participant={p} />)
+              <>
+                {session.clients.map((p) => (
+                  <ParticipantRow key={p.id} participant={p} />
+                ))}
+                {offlineClients.map((oc) => (
+                  <OfflineParticipantRow key={oc.id} client={oc} />
+                ))}
+              </>
             )
           ) : (
             session.coachProfile ? (
@@ -268,6 +290,21 @@ export default function SessionDetailScreen() {
           </View>
         ) : null}
 
+        {/* ── Live Board button ── */}
+        {isCoach && !isCancelled && (session.clients.length > 0 || offlineClients.length > 0) && (
+          <TouchableOpacity
+            style={[styles.liveBoardBtn, isCompleted && styles.liveBoardBtnSecondary]}
+            onPress={() =>
+              router.push({ pathname: '/sessions/live-board', params: { sessionId: session.id } })
+            }
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.liveBoardBtnText, isCompleted && { color: colors.primary }]}>
+              {isCompleted ? '📋 View Session Log' : '⚡ Start Live Board'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
         {/* ── Coach actions ── */}
         {isCoach && canAct && (
           <TouchableOpacity
@@ -290,6 +327,7 @@ export default function SessionDetailScreen() {
           </TouchableOpacity>
         )}
       </ScrollView>
+      <AppAlert {...alertProps} />
     </SafeAreaView>
   );
 }
@@ -396,6 +434,15 @@ const styles = StyleSheet.create({
   participantInfo: { flex: 1, marginLeft: spacing.md },
   participantName: { fontSize: fontSize.sm, fontWeight: '600', color: colors.text },
   participantUsername: { fontSize: fontSize.xs, color: colors.textMuted },
+  offlineBadge: {
+    marginTop: 3,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.warning + '22',
+    borderRadius: borderRadius.full,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  offlineBadgeText: { fontSize: 10, fontWeight: '700', color: colors.warning },
 
   avatar: {
     backgroundColor: colors.primary + '22',
@@ -429,6 +476,28 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   cancelBtnText: { color: colors.error, fontSize: fontSize.md, fontWeight: '700' },
+
+  liveBoardBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.md,
+    paddingVertical: spacing.lg,
+    alignItems: 'center',
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  liveBoardBtnSecondary: {
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  liveBoardBtnText: { color: '#fff', fontSize: fontSize.md, fontWeight: '800', letterSpacing: 0.2 },
 
   leaveBtn: {
     backgroundColor: colors.warning + '12',

@@ -1,11 +1,12 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useMarketplaceStore } from '../../src/stores/marketplaceStore';
 import { Button } from '../../src/components';
+import { AppAlert, useAppAlert } from '../../src/components/AppAlert';
 import { colors, fontSize, spacing, borderRadius } from '../../src/constants/theme';
 import i18n from '../../src/i18n';
 
@@ -13,6 +14,7 @@ export default function ProfileScreen() {
   const { t } = useTranslation();
   const { profile, signOut } = useAuthStore();
   const { coachSubscription, fetchCoachSubscription } = useMarketplaceStore();
+  const { alertProps, showAlert } = useAppAlert();
 
   useEffect(() => {
     if (profile?.role === 'coach') {
@@ -23,14 +25,18 @@ export default function ProfileScreen() {
   if (!profile) return null;
 
   const handleSignOut = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign Out',
-        style: 'destructive',
-        onPress: () => signOut(), // let onAuthStateChange + index.tsx handle navigation
-      },
-    ]);
+    showAlert({
+      title: 'Sign Out',
+      message: 'Are you sure you want to sign out?',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: () => signOut(), // let onAuthStateChange + index.tsx handle navigation
+        },
+      ],
+    });
   };
 
   const toggleLanguage = () => {
@@ -108,6 +114,7 @@ export default function ProfileScreen() {
 
         <Text style={styles.version}>Coachera v1.0.0</Text>
       </ScrollView>
+      <AppAlert {...alertProps} />
     </SafeAreaView>
   );
 }

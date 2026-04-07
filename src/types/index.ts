@@ -15,6 +15,8 @@ export interface CoachClientRequest {
   coach_id: string;
   client_id: string;
   status: 'pending' | 'accepted' | 'rejected';
+  /** 'online' = full app access; 'offline' = schedule-only + chat */
+  client_mode: 'online' | 'offline';
   created_at: string;
   // Joined
   coach?: Profile;
@@ -31,7 +33,47 @@ export interface Program {
   type: 'private' | 'public';
   price: number | null;
   is_published: boolean;
+  is_coach_only: boolean;
+  tags: string[];
   created_at: string;
+}
+
+// ─── Offline / Walkup Clients ──────────────────────────────────────────────
+export interface OfflineClient {
+  id: string;
+  coach_id: string;
+  display_name: string;
+  phone: string | null;
+  notes: string | null;
+  linked_profile_id: string | null;
+  created_at: string;
+}
+
+// ─── Active program assignment enriched with client profile ───────────────
+export interface CoachAssignment {
+  assignment_id: string;
+  program_id: string;
+  program_title: string;
+  program_duration_days: number;
+  current_day: number;
+  started_at: string;
+  completed_days: number;
+  client: Profile;
+}
+
+// ─── Live Board ───────────────────────────────────────────────────────────
+export interface LiveSessionLog {
+  id: string;
+  session_id: string;
+  client_id: string | null;
+  offline_client_id: string | null;
+  exercise_id: string | null;
+  exercise_name: string;
+  sets_done: number;
+  reps_done: string | null;
+  weight_used: string | null;
+  coach_notes: string | null;
+  logged_at: string;
 }
 
 export interface ProgramDay {

@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -13,6 +12,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { TextInput } from '../../src/components/TextInput';
 import { Button } from '../../src/components/Button';
+import { AppAlert, useAppAlert } from '../../src/components/AppAlert';
 import { useProgressStore } from '../../src/stores/progressStore';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 
@@ -35,15 +35,16 @@ export default function LogStrengthScreen() {
   const [sets, setSets] = useState('');
   const [reps, setReps] = useState('');
   const [loading, setLoading] = useState(false);
+  const { alertProps, showAlert } = useAppAlert();
 
   const handleSave = async () => {
     if (!exercise.trim()) {
-      Alert.alert(t('common.error'), t('progress.exerciseRequired'));
+      showAlert({ title: t('common.error'), message: t('progress.exerciseRequired') });
       return;
     }
     const weightNum = parseFloat(weight);
     if (!weight || isNaN(weightNum) || weightNum <= 0) {
-      Alert.alert(t('common.error'), t('progress.weightRequired'));
+      showAlert({ title: t('common.error'), message: t('progress.weightRequired') });
       return;
     }
 
@@ -58,12 +59,14 @@ export default function LogStrengthScreen() {
     setLoading(false);
 
     if (error) {
-      Alert.alert(t('common.error'), error);
+      showAlert({ title: t('common.error'), message: error });
     } else {
       if (is_pr) {
-        Alert.alert('🏆', t('progress.prDetected'), [
-          { text: t('common.done'), onPress: () => router.back() },
-        ]);
+        showAlert({
+          title: '🏆',
+          message: t('progress.prDetected'),
+          buttons: [{ text: t('common.done'), onPress: () => router.back() }],
+        });
       } else {
         router.back();
       }
@@ -137,6 +140,7 @@ export default function LogStrengthScreen() {
           size="lg"
         />
       </ScrollView>
+      <AppAlert {...alertProps} />
     </KeyboardAvoidingView>
   );
 }

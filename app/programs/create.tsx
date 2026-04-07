@@ -5,35 +5,41 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   TextInput,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { ExerciseLibraryDrawer } from '../../src/components/ExerciseLibraryDrawer';
+import { AppAlert, useAppAlert } from '../../src/components/AppAlert';
 import type { ExerciseTemplate } from '../../src/types';
 
 const SS_COLOR = '#EA580C'; // superset accent – vibrant orange
 const SS_BG = '#FFF7ED';
 const getSupersetLetter = (group: number) =>
   String.fromCharCode(64 + ((group - 1) % 26) + 1); // 1→A, 2→B …
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useProgramStore } from '../../src/stores/programStore';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 import type { ProgramDayWithExercises } from '../../src/types';
 
 // ─── Step 1: Program Details ──────────────────────────────────────────────────
+const PRESET_TAGS = ['strength', 'fat-loss', 'muscle-gain', 'cardio', 'beginner', 'intermediate', 'advanced', 'mobility', 'sport'];
+
 function Step1({
   title, setTitle,
   description, setDescription,
   durationDays, setDurationDays,
+  tags, setTags,
+  isCoachOnly, setIsCoachOnly,
   onNext,
 }: {
   title: string; setTitle: (v: string) => void;
   description: string; setDescription: (v: string) => void;
   durationDays: string; setDurationDays: (v: string) => void;
+  tags: string[]; setTags: (v: string[]) => void;
+  isCoachOnly: boolean; setIsCoachOnly: (v: boolean) => void;
   onNext: () => void;
 }) {
   const { t } = useTranslation();
@@ -41,6 +47,9 @@ function Step1({
 
   const nudgeDays = (delta: number) =>
     setDurationDays(String(Math.max(1, Math.min(365, days + delta))));
+
+  const toggleTag = (tag: string) =>
+    setTags(tags.includes(tag) ? tags.filter((t) => t !== tag) : [...tags, tag]);
 
   return (
     <ScrollView contentContainerStyle={styles.stepContent} keyboardShouldPersistTaps="handled">
@@ -96,6 +105,28 @@ function Step1({
               </Text>
             </TouchableOpacity>
           ))}
+        </View>
+      </View>
+
+      {/* Tags */}
+      <View style={styles.fieldGroup}>
+        <Text style={styles.fieldLabel}>Tags</Text>
+        <View style={styles.tagsWrap}>
+          {PRESET_TAGS.map((tag) => {
+            const active = tags.includes(tag);
+            return (
+              <TouchableOpacity
+                key={tag}
+                style={[styles.tagChip, active && styles.tagChipActive]}
+                onPress={() => toggleTag(tag)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.tagChipText, active && styles.tagChipTextActive]}>
+                  {tag}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </View>
 
@@ -432,15 +463,23 @@ function Step2({
 export default function CreateProgramScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { createProgram, addDay, addExercise } = useProgramStore();
+  const { clientPreselect, offlineClientPreselect, clientName } = useLocalSearchParams<{
+    clientPreselect?: string;
+    offlineClientPreselect?: string;
+    clientName?: string;
+  }>();
+  const { createProgram, addDay, addExercise, assignProgram, assignProgramToOffline } = useProgramStore();
 
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
+  const { alertProps, showAlert } = useAppAlert();
 
   // Step 1 state
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [durationDays, setDurationDays] = useState('7');
+  const [tags, setTags] = useState<string[]>([]);
+  const [isCoachOnly, setIsCoachOnly] = useState(false);
 
   // Step 2 state
   const [days, setDays] = useState<DayDraft[]>([]);
@@ -466,11 +505,13 @@ export default function CreateProgramScreen() {
       description: description.trim(),
       duration_days: count,
       type: 'private',
+      tags,
+      is_coach_only: isCoachOnly,
     });
 
     if (progErr || !programId) {
       setSaving(false);
-      return Alert.alert(t('common.error'), progErr ?? 'Failed to create program');
+      return showAlert({ title: t('common.error'), message: progErr ?? 'Failed to create program' });
     }
 
     // Add days + exercises
@@ -495,6 +536,12 @@ export default function CreateProgramScreen() {
       }
     }
 
+    // Auto-assign to the preselected client and go straight back
+    if (offlineClientPreselect) {
+      await assignProgramToOffline(programId, offlineClientPreselect, true);
+    } else if (clientPreselect) {
+      await assignProgram(programId, clientPreselect, true);
+    }
     setSaving(false);
     router.back();
   };
@@ -523,6 +570,8 @@ export default function CreateProgramScreen() {
           title={title} setTitle={setTitle}
           description={description} setDescription={setDescription}
           durationDays={durationDays} setDurationDays={setDurationDays}
+          tags={tags} setTags={setTags}
+          isCoachOnly={isCoachOnly} setIsCoachOnly={setIsCoachOnly}
           onNext={handleNext}
         />
       ) : (
@@ -534,6 +583,7 @@ export default function CreateProgramScreen() {
           saving={saving}
         />
       )}
+      <AppAlert {...alertProps} />
     </KeyboardAvoidingView>
   );
 }
@@ -819,4 +869,55 @@ const styles = StyleSheet.create({
   },
   ssPillText: { fontSize: fontSize.xs, fontWeight: '500', color: colors.textMuted },
   ssPillTextLinked: { color: SS_COLOR, fontWeight: '700' },
+
+  // ── Tags ──────────────────────────────────────────────────────────────────────
+  tagsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  tagChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  tagChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  tagChipText: { fontSize: fontSize.xs, fontWeight: '600', color: colors.textMuted },
+  tagChipTextActive: { color: '#fff' },
+
+  // ── Coach-only toggle ─────────────────────────────────────────────────────────
+  coachOnlyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  coachOnlyRowActive: { borderColor: colors.primary, backgroundColor: colors.accentFaded },
+  coachOnlyText: { flex: 1 },
+  coachOnlyTitle: { fontSize: fontSize.md, fontWeight: '700', color: colors.text },
+  coachOnlyDesc: { fontSize: fontSize.sm, color: colors.textMuted, marginTop: 2 },
+  coachOnlyToggle: {
+    width: 46,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.border,
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  coachOnlyToggleOn: { backgroundColor: colors.primary },
+  coachOnlyThumb: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  coachOnlyThumbOn: { alignSelf: 'flex-end' },
 });

@@ -5,14 +5,16 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { useAuthStore } from '../../src/stores/authStore';
+import { useConnectionStore } from '../../src/stores/connectionStore';
 import { useProgressStore } from '../../src/stores/progressStore';
+import { AppAlert, useAppAlert } from '../../src/components/AppAlert';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 
 type Section = 'measurements' | 'strength' | 'photos';
@@ -60,6 +62,7 @@ function MeasurementsSection() {
   const { t } = useTranslation();
   const router = useRouter();
   const { measurements, fetchMeasurements, deleteMeasurement, isLoading } = useProgressStore();
+  const { alertProps, showAlert } = useAppAlert();
 
   useFocusEffect(useCallback(() => { fetchMeasurements(); }, [fetchMeasurements]));
 
@@ -71,17 +74,21 @@ function MeasurementsSection() {
     .filter((v): v is number => v != null);
 
   const handleDelete = (id: string) => {
-    Alert.alert(t('progress.deleteEntry'), t('progress.deleteConfirm'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.delete'),
-        style: 'destructive',
-        onPress: async () => {
-          const { error } = await deleteMeasurement(id);
-          if (error) Alert.alert(t('common.error'), error);
+    showAlert({
+      title: t('progress.deleteEntry'),
+      message: t('progress.deleteConfirm'),
+      buttons: [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.delete'),
+          style: 'destructive',
+          onPress: async () => {
+            const { error } = await deleteMeasurement(id);
+            if (error) showAlert({ title: t('common.error'), message: error });
+          },
         },
-      },
-    ]);
+      ],
+    });
   };
 
   return (
@@ -172,6 +179,7 @@ function MeasurementsSection() {
           ))}
         </>
       )}
+      <AppAlert {...alertProps} />
     </View>
   );
 }
@@ -183,6 +191,7 @@ function StrengthSection() {
   const router = useRouter();
   const { strengthLogs, fetchStrengthLogs, deleteStrengthLog, isLoading } = useProgressStore();
   const [selectedExercise, setSelectedExercise] = useState<string | null>(null);
+  const { alertProps, showAlert } = useAppAlert();
 
   useFocusEffect(useCallback(() => { fetchStrengthLogs(); }, [fetchStrengthLogs]));
 
@@ -200,17 +209,21 @@ function StrengthSection() {
     .filter(Boolean);
 
   const handleDelete = (id: string) => {
-    Alert.alert(t('progress.deleteEntry'), t('progress.deleteConfirm'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.delete'),
-        style: 'destructive',
-        onPress: async () => {
-          const { error } = await deleteStrengthLog(id);
-          if (error) Alert.alert(t('common.error'), error);
+    showAlert({
+      title: t('progress.deleteEntry'),
+      message: t('progress.deleteConfirm'),
+      buttons: [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.delete'),
+          style: 'destructive',
+          onPress: async () => {
+            const { error } = await deleteStrengthLog(id);
+            if (error) showAlert({ title: t('common.error'), message: error });
+          },
         },
-      },
-    ]);
+      ],
+    });
   };
 
   return (
@@ -315,6 +328,7 @@ function StrengthSection() {
           <Text style={styles.emptyText}>{t('progress.noStrength')}</Text>
         </View>
       ) : null}
+      <AppAlert {...alertProps} />
     </View>
   );
 }
@@ -325,6 +339,7 @@ function PhotosSection() {
   const { t } = useTranslation();
   const router = useRouter();
   const { photos, fetchPhotos, deletePhoto, isLoading } = useProgressStore();
+  const { alertProps, showAlert } = useAppAlert();
 
   useFocusEffect(useCallback(() => { fetchPhotos(); }, [fetchPhotos]));
 
@@ -332,17 +347,21 @@ function PhotosSection() {
     `progress.label${label.charAt(0).toUpperCase()}${label.slice(1)}` as any;
 
   const handleDelete = (id: string, url: string) => {
-    Alert.alert(t('progress.deleteEntry'), t('progress.deleteConfirm'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.delete'),
-        style: 'destructive',
-        onPress: async () => {
-          const { error } = await deletePhoto(id, url);
-          if (error) Alert.alert(t('common.error'), error);
+    showAlert({
+      title: t('progress.deleteEntry'),
+      message: t('progress.deleteConfirm'),
+      buttons: [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.delete'),
+          style: 'destructive',
+          onPress: async () => {
+            const { error } = await deletePhoto(id, url);
+            if (error) showAlert({ title: t('common.error'), message: error });
+          },
         },
-      },
-    ]);
+      ],
+    });
   };
 
   return (
@@ -386,6 +405,7 @@ function PhotosSection() {
           </View>
         </>
       )}
+      <AppAlert {...alertProps} />
     </View>
   );
 }
@@ -394,7 +414,11 @@ function PhotosSection() {
 
 export default function ProgressScreen() {
   const { t } = useTranslation();
+  const router = useRouter();
+  const { profile } = useAuthStore();
+  const { myClientMode } = useConnectionStore();
   const [section, setSection] = useState<Section>('measurements');
+  const isOnGroundClient = profile?.role !== 'coach' && myClientMode === 'offline';
 
   const sections: { key: Section; label: string }[] = [
     { key: 'measurements', label: t('progress.measurements') },
@@ -410,6 +434,21 @@ export default function ProgressScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>{t('tabs.progress')}</Text>
       </View>
+
+      {/* Session History & Packages — only for On Ground clients */}
+      {isOnGroundClient && (
+        <TouchableOpacity
+          style={styles.sessionsCard}
+          onPress={() => router.push({ pathname: '/coach/offline-client-detail', params: { viewOnly: 'true' } })}
+          activeOpacity={0.8}
+        >
+          <View>
+            <Text style={styles.sessionsCardTitle}>Session History & Packages</Text>
+            <Text style={styles.sessionsCardSub}>View past coach sessions and assigned packages</Text>
+          </View>
+          <Text style={styles.sessionsCardArrow}>›</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Fixed 3-up segmented control */}
       <View style={styles.segmentedWrapper}>
@@ -659,4 +698,21 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
   },
   photoDate: { fontSize: fontSize.xs, color: colors.textMuted },
+
+  // Session History card
+  sessionsCard: {
+    marginHorizontal: spacing['2xl'],
+    marginBottom: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sessionsCardTitle: { fontSize: fontSize.sm, fontWeight: '700', color: colors.text },
+  sessionsCardSub: { fontSize: fontSize.xs, color: colors.textMuted, marginTop: 2 },
+  sessionsCardArrow: { fontSize: 22, color: colors.textMuted },
 });

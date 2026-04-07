@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 import { sendNotification } from '../lib/sendNotification';
-import type { Session, Profile } from '../types';
+import type { Session, Profile, OfflineClient } from '../types';
 
 export interface SessionWithClients extends Session {
   clients: Profile[];
+  offlineClients: OfflineClient[];
   coachProfile?: Profile;
 }
 
@@ -15,6 +16,7 @@ interface CreateSessionData {
   notes?: string | null;
   max_clients?: number | null;
   client_ids?: string[];
+  offline_client_ids?: string[];
   booking_cutoff_hours?: number;
   cancellation_cutoff_hours?: number;
 }
@@ -50,6 +52,8 @@ interface SessionState {
   bookSession: (sessionId: string) => Promise<{ error: string | null }>;
   addClientToSession: (sessionId: string, clientId: string) => Promise<{ error: string | null }>;
   removeClientFromSession: (sessionId: string, clientId: string) => Promise<{ error: string | null }>;
+  addOfflineClientToSession: (sessionId: string, offlineClientId: string, offlineClient: OfflineClient) => Promise<{ error: string | null }>;
+  removeOfflineClientFromSession: (sessionId: string, offlineClientId: string) => Promise<{ error: string | null }>;
   clearCurrentSession: () => void;
 }
 
@@ -97,11 +101,30 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
         if (error) throw error;
 
-        const sessions: SessionWithClients[] = (data ?? []).map((s: any) => ({
+        // Fetch offline clients for all sessions in batch and build a lookup map
+        const rawSessions = data ?? [];
+        const sessionIds = rawSessions.map((s: any) => s.id as string);
+        const offlineMap: Record<string, OfflineClient[]> = {};
+        if (sessionIds.length > 0) {
+          const { data: offlineRows } = await supabase
+            .from('session_offline_clients')
+            .select('session_id, offline_client:offline_clients!session_offline_clients_offline_client_id_fkey(*)')
+            .in('session_id', sessionIds);
+          for (const row of offlineRows ?? []) {
+            const sid = (row as any).session_id as string;
+            const oc = (row as any).offline_client as OfflineClient | null;
+            if (sid && oc) {
+              (offlineMap[sid] ??= []).push(oc);
+            }
+          }
+        }
+
+        const sessions: SessionWithClients[] = rawSessions.map((s: any) => ({
           ...s,
           clients: (s.session_clients ?? [])
             .map((sc: any) => sc.profile)
             .filter(Boolean),
+          offlineClients: offlineMap[s.id] ?? [],
         }));
 
         set({ sessions, isLoading: false });
@@ -137,6 +160,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         const sessions: SessionWithClients[] = (data ?? []).map((s: any) => ({
           ...s,
           clients: [],
+          offlineClients: [],
           coachProfile: s.coach ?? undefined,
         }));
 
@@ -178,8 +202,16 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         clients: (data.session_clients ?? [])
           .map((sc: any) => sc.profile)
           .filter(Boolean),
+        offlineClients: [],
         coachProfile: data.coach ?? undefined,
       };
+
+      // Fetch offline attendees for this session
+      const { data: offlineRows } = await supabase
+        .from('session_offline_clients')
+        .select('offline_client:offline_clients!session_offline_clients_offline_client_id_fkey(*)')
+        .eq('session_id', sessionId);
+      session.offlineClients = (offlineRows ?? []).map((r: any) => r.offline_client).filter(Boolean) as OfflineClient[];
 
       set({ currentSession: session, isLoading: false });
     } catch (_e) {
@@ -188,7 +220,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   // ─── Coach: create a session, optionally with initial clients ─────────────
-  createSession: async ({ client_ids, ...sessionData }) => {
+  createSession: async ({ client_ids, offline_client_ids, ...sessionData }) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { id: null, error: 'Not authenticated' };
 
@@ -220,6 +252,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           data: { session_id: session.id },
         });
       }
+    }
+
+    if (offline_client_ids && offline_client_ids.length > 0) {
+      await supabase
+        .from('session_offline_clients')
+        .insert(offline_client_ids.map((id) => ({ session_id: session.id, offline_client_id: id })));
     }
 
     return { id: session.id, error: null };
@@ -360,6 +398,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   // ─── Coach: add a client to an existing session ───────────────────────────
   addClientToSession: async (sessionId, clientId) => {
+    const session = get().currentSession;
+    if (session?.id === sessionId && session.max_clients !== null) {
+      const total = session.clients.length + session.offlineClients.length;
+      if (total >= session.max_clients) return { error: 'session_full' };
+    }
+
     const { error } = await supabase
       .from('session_clients')
       .insert({ session_id: sessionId, client_id: clientId });
@@ -504,6 +548,49 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       };
     });
 
+    return { error: null };
+  },
+
+  // ─── Coach: add an offline client to an existing session ─────────────────
+  addOfflineClientToSession: async (sessionId, offlineClientId, offlineClient) => {
+    const session = get().currentSession;
+    if (session?.id === sessionId && session.max_clients !== null) {
+      const total = session.clients.length + session.offlineClients.length;
+      if (total >= session.max_clients) return { error: 'session_full' };
+    }
+
+    const { error } = await supabase
+      .from('session_offline_clients')
+      .insert({ session_id: sessionId, offline_client_id: offlineClientId });
+
+    if (error) {
+      if (error.code === '23505') return { error: 'already_added' };
+      return { error: error.message };
+    }
+
+    set((s) => ({
+      currentSession: s.currentSession?.id === sessionId
+        ? { ...s.currentSession, offlineClients: [...s.currentSession.offlineClients, offlineClient] }
+        : s.currentSession,
+    }));
+    return { error: null };
+  },
+
+  // ─── Coach: remove an offline client from a session ──────────────────────
+  removeOfflineClientFromSession: async (sessionId, offlineClientId) => {
+    const { error } = await supabase
+      .from('session_offline_clients')
+      .delete()
+      .eq('session_id', sessionId)
+      .eq('offline_client_id', offlineClientId);
+
+    if (error) return { error: error.message };
+
+    set((s) => ({
+      currentSession: s.currentSession?.id === sessionId
+        ? { ...s.currentSession, offlineClients: s.currentSession.offlineClients.filter((c) => c.id !== offlineClientId) }
+        : s.currentSession,
+    }));
     return { error: null };
   },
 }));

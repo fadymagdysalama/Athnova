@@ -15,12 +15,14 @@ interface ConnectionState {
   // Client side
   myCoach: Profile | null;
   myRequest: CoachClientRequest | null;
+  /** The mode the coach assigned this client: 'online' (full) | 'offline' (schedule only) */
+  myClientMode: 'online' | 'offline' | null;
 
   isLoading: boolean;
 
   // Coach actions
   fetchCoachData: (silent?: boolean) => Promise<void>;
-  acceptRequest: (requestId: string) => Promise<{ error: string | null }>;
+  acceptRequest: (requestId: string, mode?: 'online' | 'offline') => Promise<{ error: string | null }>;
   rejectRequest: (requestId: string) => Promise<{ error: string | null }>;
   removeClient: (requestId: string) => Promise<{ error: string | null }>;
 
@@ -36,6 +38,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
   clients: [],
   myCoach: null,
   myRequest: null,
+  myClientMode: null,
   isLoading: false,
 
   fetchCoachData: async (silent = false) => {
@@ -62,7 +65,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
     set({ pendingRequests: pending, clients: accepted, isLoading: false });
   },
 
-  acceptRequest: async (requestId: string) => {
+  acceptRequest: async (requestId: string, mode: 'online' | 'offline' = 'online') => {
     // Find the client before updating so we can send the notification
     const pending = get().pendingRequests.find((r) => r.request.id === requestId);
 
@@ -92,7 +95,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
 
     const { error } = await supabase
       .from('coach_client_requests')
-      .update({ status: 'accepted' })
+      .update({ status: 'accepted', client_mode: mode })
       .eq('id', requestId);
 
     if (error) return { error: error.message };
@@ -108,6 +111,25 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
     }
 
     await get().fetchCoachData(true);
+
+    // Auto-link: if this coach has an offline_client with matching display_name, link them
+    if (pending) {
+      const { data: offline } = await supabase
+        .from('offline_clients')
+        .select('id')
+        .eq('coach_id', user.id)
+        .ilike('display_name', pending.profile.display_name)
+        .is('linked_profile_id', null)
+        .limit(1)
+        .maybeSingle();
+      if (offline) {
+        await supabase
+          .from('offline_clients')
+          .update({ linked_profile_id: pending.profile.id })
+          .eq('id', offline.id);
+      }
+    }
+
     return { error: null };
   },
 
@@ -164,10 +186,11 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
       set({
         myRequest: request,
         myCoach: request.status === 'accepted' ? request.coach : null,
+        myClientMode: request.status === 'accepted' ? (request.client_mode ?? 'online') : null,
         isLoading: false,
       });
     } else {
-      set({ myRequest: null, myCoach: null, isLoading: false });
+      set({ myRequest: null, myCoach: null, myClientMode: null, isLoading: false });
     }
   },
 

@@ -1,7 +1,10 @@
 import { Tabs, Redirect } from 'expo-router';
-import { View, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { useEffect, useRef, useState } from 'react';
+import { supabase } from '../../src/lib/supabase';
 import { useAuthStore } from '../../src/stores/authStore';
+import { useConnectionStore } from '../../src/stores/connectionStore';
 import { colors, spacing } from '../../src/constants/theme';
 
 // ─── Minimal View-based icons ──────────────────────────────────────────────
@@ -101,7 +104,7 @@ function GearIcon({ color }: { color: string }) {
   );
 }
 
-function TabIcon({ name, focused }: { name: string; focused: boolean }) {
+function TabIcon({ name, focused, badgeCount }: { name: string; focused: boolean; badgeCount?: number }) {
   const activeColor = colors.accent;
   const inactiveColor = colors.textMuted;
   const color = focused ? activeColor : inactiveColor;
@@ -120,6 +123,11 @@ function TabIcon({ name, focused }: { name: string; focused: boolean }) {
   return (
     <View style={[styles.tabIconWrap, focused && styles.tabIconWrapActive]}>
       {iconMap[name] ?? null}
+      {(badgeCount ?? 0) > 0 && (
+        <View style={styles.tabBadge}>
+          <Text style={styles.tabBadgeText}>{badgeCount! > 9 ? '9+' : badgeCount}</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -127,11 +135,60 @@ function TabIcon({ name, focused }: { name: string; focused: boolean }) {
 export default function TabLayout() {
   const { t } = useTranslation();
   const { session, profile } = useAuthStore();
+  const { myClientMode, fetchClientData } = useConnectionStore();
+
+  const isCoach = profile?.role === 'coach';
+  const [chatUnreadTotal, setChatUnreadTotal] = useState(0);
+
+  // For client users, eagerly load their connection data so we can determine
+  // which tabs to show (offline clients see schedule-only).
+  // NOTE: must be before any early returns to satisfy Rules of Hooks.
+  useEffect(() => {
+    if (profile && !isCoach) {
+      fetchClientData(true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCoach, profile]);
+
+  // Track unread client messages for the badge on the Clients tab icon.
+  const chatChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  useEffect(() => {
+    if (!profile?.id || !isCoach) { setChatUnreadTotal(0); return; }
+    const loadUnread = async () => {
+      const { count } = await supabase
+        .from('coach_client_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('coach_id', profile.id)
+        .neq('sender_id', profile.id)
+        .eq('is_read', false);
+      setChatUnreadTotal(count ?? 0);
+    };
+    loadUnread();
+    // Remove any existing channel before creating a new one (handles StrictMode double-invoke)
+    if (chatChannelRef.current) {
+      supabase.removeChannel(chatChannelRef.current);
+      chatChannelRef.current = null;
+    }
+    // Use a unique channel name so a stale async-removal can't clash with a fresh subscription
+    const channelName = `chat-unread:${profile.id}:${Date.now()}`;
+    const channel = supabase
+      .channel(channelName)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'coach_client_messages', filter: `coach_id=eq.${profile.id}` }, loadUnread)
+      .subscribe();
+    chatChannelRef.current = channel;
+    return () => {
+      supabase.removeChannel(channel);
+      chatChannelRef.current = null;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id, isCoach]);
 
   if (!session) return <Redirect href="/auth/login" />;
   if (!profile) return <Redirect href="/auth/setup-profile" />;
 
-  const isCoach = profile.role === 'coach';
+  // An "on-ground client" is a connected client (has the app) the coach marked as offline mode.
+  // They see only: Schedule, My Coach, Profile.
+  const isOnGroundClient = !isCoach && myClientMode === 'offline';
 
   return (
     <Tabs
@@ -155,7 +212,7 @@ export default function TabLayout() {
         options={{
           title: t('tabs.library'),
           tabBarIcon: ({ focused }) => <TabIcon name="library" focused={focused} />,
-          href: isCoach ? undefined : null, // Visible for coaches, hidden for clients
+          href: isCoach ? undefined : null, // Coaches only
         }}
       />
       <Tabs.Screen
@@ -170,6 +227,8 @@ export default function TabLayout() {
         options={{
           title: t('tabs.schedule'),
           tabBarIcon: ({ focused }) => <TabIcon name="schedule" focused={focused} />,
+          // Coaches see schedule; On Ground clients see schedule; Online clients do NOT
+          href: isCoach || isOnGroundClient ? undefined : null,
         }}
       />
       {isCoach ? (
@@ -177,7 +236,7 @@ export default function TabLayout() {
           name="clients"
           options={{
             title: t('tabs.clients'),
-            tabBarIcon: ({ focused }) => <TabIcon name="clients" focused={focused} />,
+            tabBarIcon: ({ focused }) => <TabIcon name="clients" focused={focused} badgeCount={chatUnreadTotal} />,
           }}
         />
       ) : (
@@ -210,7 +269,7 @@ export default function TabLayout() {
         options={{
           title: t('tabs.marketplace'),
           tabBarIcon: ({ focused }) => <TabIcon name="marketplace" focused={focused} />,
-          href: isCoach ? null : undefined, // Hidden for coaches, visible for clients
+          href: isCoach ? null : undefined,
         }}
       />
       <Tabs.Screen
@@ -226,7 +285,7 @@ export default function TabLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.background,
     borderTopColor: colors.borderLight,
     borderTopWidth: 1,
     height: 88,
@@ -252,5 +311,24 @@ const styles = StyleSheet.create({
   },
   tabIconWrapActive: {
     backgroundColor: colors.accentFaded,
+  },
+  tabBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    backgroundColor: colors.error,
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: colors.background,
+  },
+  tabBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#fff',
   },
 });

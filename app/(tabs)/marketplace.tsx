@@ -7,12 +7,12 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useMarketplaceStore } from '../../src/stores/marketplaceStore';
+import { AppAlert, useAppAlert } from '../../src/components/AppAlert';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 import type { PublicProgram } from '../../src/types';
 
@@ -82,6 +82,7 @@ function ClientMarketplaceView() {
   const [refreshing, setRefreshing] = useState(false);
 
   const [purchasing, setPurchasing] = useState<string | null>(null);
+  const { alertProps, showAlert } = useAppAlert();
 
   // Tab-focus refresh
   useFocusEffect(
@@ -115,27 +116,31 @@ function ClientMarketplaceView() {
       ? t('marketplace.purchaseFree', { title: program.title })
       : t('marketplace.purchaseConfirm', { title: program.title, price: program.price!.toFixed(2) });
 
-    Alert.alert(t('marketplace.purchaseTitle'), message, [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: isFree ? t('marketplace.getFree') : t('marketplace.buy', { price: program.price!.toFixed(2) }),
-        onPress: async () => {
-          try {
-            setPurchasing(program.id);
-            const { error } = await purchaseProgram(program.id);
-            if (error) {
-              Alert.alert(t('common.error'), error);
-            } else {
-              Alert.alert(t('marketplace.purchaseSuccess'), t('marketplace.purchaseSuccessHint'));
+    showAlert({
+      title: t('marketplace.purchaseTitle'),
+      message,
+      buttons: [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: isFree ? t('marketplace.getFree') : t('marketplace.buy', { price: program.price!.toFixed(2) }),
+          onPress: async () => {
+            try {
+              setPurchasing(program.id);
+              const { error } = await purchaseProgram(program.id);
+              if (error) {
+                showAlert({ title: t('common.error'), message: error });
+              } else {
+                showAlert({ title: t('marketplace.purchaseSuccess'), message: t('marketplace.purchaseSuccessHint') });
+              }
+            } catch (error) {
+              showAlert({ title: t('common.error'), message: error instanceof Error ? error.message : String(error) });
+            } finally {
+              setPurchasing(null);
             }
-          } catch (error) {
-            Alert.alert(t('common.error'), error instanceof Error ? error.message : String(error));
-          } finally {
-            setPurchasing(null);
-          }
+          },
         },
-      },
-    ]);
+      ],
+    });
   };
 
   if (isLoading && publicPrograms.length === 0 && !refreshing) {
@@ -143,29 +148,32 @@ function ClientMarketplaceView() {
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
-    >
+    <>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+      >
 
-      {publicPrograms.length === 0 ? (
-        <View style={styles.emptyBox}>
-          <Text style={styles.emptyIcon}>🏪</Text>
-          <Text style={styles.emptyTitle}>{t('marketplace.noPrograms')}</Text>
-          <Text style={styles.emptyHint}>{t('marketplace.noProgramsHint')}</Text>
-        </View>
-      ) : (
-        publicPrograms.map((p) => (
-          <ProgramCard
-            key={p.id}
-            program={p}
-            purchased={isPurchased(p.id)}
-            onPress={() => handleCardPress(p)}
-          />
-        ))
-      )}
-    </ScrollView>
+        {publicPrograms.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyIcon}>🏪</Text>
+            <Text style={styles.emptyTitle}>{t('marketplace.noPrograms')}</Text>
+            <Text style={styles.emptyHint}>{t('marketplace.noProgramsHint')}</Text>
+          </View>
+        ) : (
+          publicPrograms.map((p) => (
+            <ProgramCard
+              key={p.id}
+              program={p}
+              purchased={isPurchased(p.id)}
+              onPress={() => handleCardPress(p)}
+            />
+          ))
+        )}
+      </ScrollView>
+      <AppAlert {...alertProps} />
+    </>
   );
 }
 
@@ -175,11 +183,19 @@ export default function MarketplaceScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>{t('marketplace.title')}</Text>
-        <Text style={styles.headerSub}>{t('marketplace.browse')}</Text>
+      <View style={styles.comingSoonContainer}>
+        <View style={styles.comingSoonIconWrap}>
+          <Text style={styles.comingSoonIcon}>🏪</Text>
+        </View>
+        <Text style={styles.comingSoonLabel}>{t('common.comingSoon', 'Coming Soon')}</Text>
+        <Text style={styles.comingSoonTitle}>{t('marketplace.title', 'Marketplace')}</Text>
+        <Text style={styles.comingSoonDesc}>
+          {t(
+            'marketplace.comingSoonDesc',
+            'Browse and purchase programs from top coaches. We\'re putting the finishing touches on this feature — stay tuned!'
+          )}
+        </Text>
       </View>
-      <ClientMarketplaceView />
     </SafeAreaView>
   );
 }
@@ -187,6 +203,54 @@ export default function MarketplaceScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background },
   container: { flex: 1 },
+
+  // Coming Soon
+  comingSoonContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing['2xl'],
+    paddingBottom: 60,
+  },
+  comingSoonIconWrap: {
+    width: 96,
+    height: 96,
+    borderRadius: 28,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xl,
+    shadowColor: '#1A1A2E',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  comingSoonIcon: { fontSize: 44 },
+  comingSoonLabel: {
+    fontSize: fontSize.xs,
+    fontWeight: '700',
+    color: colors.accent,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    marginBottom: spacing.sm,
+  },
+  comingSoonTitle: {
+    fontSize: fontSize['2xl'],
+    fontWeight: '800',
+    color: colors.text,
+    letterSpacing: -0.5,
+    marginBottom: spacing.md,
+  },
+  comingSoonDesc: {
+    fontSize: fontSize.sm,
+    color: colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 22,
+    maxWidth: 300,
+  },
   content: { padding: spacing.lg, paddingBottom: 40 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 

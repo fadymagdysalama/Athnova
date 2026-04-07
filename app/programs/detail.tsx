@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Linking,
   TextInput,
 } from 'react-native';
@@ -15,6 +14,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useProgramStore } from '../../src/stores/programStore';
 import { useAuthStore } from '../../src/stores/authStore';
+import { AppAlert, useAppAlert } from '../../src/components/AppAlert';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 import type { ProgramExercise } from '../../src/types';
 
@@ -124,6 +124,7 @@ export default function ProgramDetailScreen() {
   const [savingExerciseFeedback, setSavingExerciseFeedback] = useState(false);
 
   const isCoach = profile?.role === 'coach';
+  const { alertProps, showAlert } = useAppAlert();
 
   useEffect(() => {
     if (id) {
@@ -178,7 +179,7 @@ export default function ProgramDetailScreen() {
     setMarkingDay(dayId);
     const { error } = await logWorkout(currentProgram.id, dayId);
     setMarkingDay(null);
-    if (error) Alert.alert(t('common.error'), error);
+    if (error) showAlert({ title: t('common.error'), message: error });
   };
 
   const handleEditFeedback = (dayId: string) => {
@@ -192,7 +193,7 @@ export default function ProgramDetailScreen() {
     const { error } = await submitFeedback(currentProgram.id, dayId, feedbackDraft.trim());
     setSavingFeedback(false);
     if (error) {
-      Alert.alert(t('common.error'), error);
+      showAlert({ title: t('common.error'), message: error });
     } else {
       setFeedbacks((prev) => ({ ...prev, [dayId]: { ...prev[dayId], text: feedbackDraft.trim() } }));
       setFeedbackEditing(null);
@@ -210,7 +211,7 @@ export default function ProgramDetailScreen() {
     const { error } = await submitExerciseFeedback(currentProgram.id, dayId, exerciseId, exerciseFeedbackDraft.trim());
     setSavingExerciseFeedback(false);
     if (error) {
-      Alert.alert(t('common.error'), error);
+      showAlert({ title: t('common.error'), message: error });
     } else {
       setExerciseFeedbacks((prev) => ({ ...prev, [exerciseId]: { ...prev[exerciseId], text: exerciseFeedbackDraft.trim() } }));
       setExerciseFeedbackEditing(null);
@@ -470,6 +471,7 @@ export default function ProgramDetailScreen() {
           );
         })}
       </ScrollView>
+      <AppAlert {...alertProps} />
     </SafeAreaView>
   );
 }

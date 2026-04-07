@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Alert,
   ActivityIndicator,
   Modal,
   Pressable,
@@ -15,6 +14,7 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useExerciseLibraryStore } from '../../src/stores/exerciseLibraryStore';
+import { AppAlert, useAppAlert } from '../../src/components/AppAlert';
 import { colors, spacing, fontSize, borderRadius, shadow } from '../../src/constants/theme';
 import type { ExerciseTemplate } from '../../src/types';
 
@@ -54,12 +54,12 @@ function AddCategoryModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
-      <Pressable style={styles.backdrop} onPress={handleClose} />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.centeredWrap}
+        style={{ flex: 1, justifyContent: 'flex-end' }}
       >
-        <View style={styles.centeredSheet}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
+        <View style={styles.sheet}>
           <Text style={styles.modalTitle}>{t('library.addCategory')}</Text>
           <TextInput
             style={styles.input}
@@ -146,7 +146,7 @@ function AddExerciseModal({
   const isEdit = !!exerciseToEdit;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
       <Pressable style={styles.backdrop} onPress={handleClose} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.sheetWrap}>
         <View style={styles.sheet}>
@@ -370,6 +370,7 @@ export default function LibraryScreen() {
   const [addExerciseDefaultCat, setAddExerciseDefaultCat] = useState('push');
   const [editingExercise, setEditingExercise] = useState<ExerciseTemplate | null>(null);
   const [saving, setSaving] = useState(false);
+  const { alertProps, showAlert } = useAppAlert();
 
   useEffect(() => { fetch(); }, []);
 
@@ -409,7 +410,7 @@ export default function LibraryScreen() {
     setSaving(true);
     const { error } = await add(data);
     setSaving(false);
-    if (error) return Alert.alert(t('common.error'), error);
+    if (error) return showAlert({ title: t('common.error'), message: error });
     setShowAddExercise(false);
   };
 
@@ -420,45 +421,53 @@ export default function LibraryScreen() {
     setSaving(true);
     const { error } = await update(editingExercise.id, data);
     setSaving(false);
-    if (error) return Alert.alert(t('common.error'), error);
+    if (error) return showAlert({ title: t('common.error'), message: error });
     setEditingExercise(null);
   };
 
   const handleDeleteExercise = (id: string, name: string) => {
-    Alert.alert(t('library.deleteTitle'), t('library.deleteConfirm', { name }), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.delete'), style: 'destructive',
-        onPress: async () => {
-          const { error } = await remove(id);
-          if (error) Alert.alert(t('common.error'), error);
+    showAlert({
+      title: t('library.deleteTitle'),
+      message: t('library.deleteConfirm', { name }),
+      buttons: [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.delete'), style: 'destructive',
+          onPress: async () => {
+            const { error } = await remove(id);
+            if (error) showAlert({ title: t('common.error'), message: error });
+          },
         },
-      },
-    ]);
+      ],
+    });
   };
 
   const handleAddCategory = async (name: string) => {
     if (BUILT_IN_ORDER.includes(name.toLowerCase())) {
-      return Alert.alert(t('common.error'), t('library.categoryAlreadyExists'));
+      return showAlert({ title: t('common.error'), message: t('library.categoryAlreadyExists') });
     }
     setSaving(true);
     const { error } = await addCategory(name);
     setSaving(false);
-    if (error) return Alert.alert(t('common.error'), error);
+    if (error) return showAlert({ title: t('common.error'), message: error });
     setShowAddCategory(false);
   };
 
   const handleDeleteCategory = (cat: string) => {
-    Alert.alert(t('library.deleteCategoryTitle'), t('library.deleteCategoryConfirm', { name: cat }), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.delete'), style: 'destructive',
-        onPress: async () => {
-          const { error } = await removeCategory(cat);
-          if (error) Alert.alert(t('common.error'), error);
+    showAlert({
+      title: t('library.deleteCategoryTitle'),
+      message: t('library.deleteCategoryConfirm', { name: cat }),
+      buttons: [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.delete'), style: 'destructive',
+          onPress: async () => {
+            const { error } = await removeCategory(cat);
+            if (error) showAlert({ title: t('common.error'), message: error });
+          },
         },
-      },
-    ]);
+      ],
+    });
   };
 
   const isEmptyLibrary = exercises.length === 0 && (customCategories ?? []).length === 0;
@@ -551,6 +560,7 @@ export default function LibraryScreen() {
         onSave={handleAddCategory}
         saving={saving}
       />
+      <AppAlert {...alertProps} />
     </View>
   );
 }
@@ -712,13 +722,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     padding: spacing['2xl'],
     paddingBottom: 40,
-    gap: spacing.lg,
-  },
-  centeredWrap: { flex: 1, justifyContent: 'center', paddingHorizontal: spacing['2xl'] },
-  centeredSheet: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.xl,
-    padding: spacing['2xl'],
     gap: spacing.lg,
   },
   handle: {

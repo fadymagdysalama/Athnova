@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -12,19 +12,22 @@ import {
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useProgressStore } from '../../src/stores/progressStore';
+import { useProgramStore } from '../../src/stores/programStore';
+import { useDocumentStore } from '../../src/stores/documentStore';
 import { supabase } from '../../src/lib/supabase';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 
-type Section = 'measurements' | 'strength' | 'photos' | 'programs';
+type Section = 'measurements' | 'strength' | 'photos' | 'programs' | 'documents';
 
 interface ProgramProgressItem {
   programId: string;
   programTitle: string;
   totalDays: number;
   currentDay: number;
+  clientVisible: boolean;
   days: Array<{ id: string; day_number: number }>;
   completedDayIds: string[];
   feedbacks: Array<{ day_id: string; text: string | null }>;
@@ -62,25 +65,36 @@ function SparkChart({ data, color = colors.primary }: { data: number[]; color?: 
 export default function ClientProgressScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { clientId, clientName } = useLocalSearchParams<{
+  const { clientId, clientName, clientMode, coachId } = useLocalSearchParams<{
     clientId: string;
     clientName: string;
+    clientMode?: string;
+    coachId?: string;
   }>();
 
   const { measurements, strengthLogs, photos, fetchMeasurements, fetchStrengthLogs, fetchPhotos, isLoading } =
     useProgressStore();
+  const { myPrograms, fetchMyPrograms, assignProgram, unassignProgram, updateAssignmentVisibility } = useProgramStore();
+  const { clientDocuments, fetchClientDocuments, previewDocument, openDocument } = useDocumentStore();
 
   const [section, setSection] = useState<Section>('programs');
   const [fullscreenPhoto, setFullscreenPhoto] = useState<{ url: string; label: string; date: string } | null>(null);
   const [programsProgress, setProgramsProgress] = useState<ProgramProgressItem[]>([]);
   const [programsLoading, setProgramsLoading] = useState(false);
 
+  // Program picker state
+  const [showProgramPicker, setShowProgramPicker] = useState(false);
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [pickerAssignedIds, setPickerAssignedIds] = useState<string[]>([]);
+  const [pickerToggling, setPickerToggling] = useState<string | null>(null);
+  const [visibilityToggling, setVisibilityToggling] = useState<string | null>(null);
+
   const loadProgramsProgress = async () => {
     if (!clientId) return;
     setProgramsLoading(true);
     const { data: assignments } = await supabase
       .from('program_assignments')
-      .select('id, program_id, current_day, program:programs(id, title, duration_days)')
+      .select('id, program_id, current_day, client_visible, program:programs(id, title, duration_days)')
       .eq('client_id', clientId)
       .order('started_at', { ascending: false });
 
@@ -104,6 +118,7 @@ export default function ClientProgressScreen() {
             programTitle: a.program.title as string,
             totalDays: a.program.duration_days as number,
             currentDay: a.current_day as number,
+            clientVisible: (a.client_visible ?? true) as boolean,
             days: (daysRes.data ?? []) as Array<{ id: string; day_number: number }>,
             completedDayIds: (logsRes.data ?? []).map((l: any) => l.day_id as string),
             feedbacks: (feedbackRes.data ?? []) as Array<{ day_id: string; text: string | null }>,
@@ -114,6 +129,14 @@ export default function ClientProgressScreen() {
     setProgramsLoading(false);
   };
 
+  const handleVisibilityToggle = async (prog: ProgramProgressItem) => {
+    if (!clientId) return;
+    setVisibilityToggling(prog.programId);
+    await updateAssignmentVisibility(prog.programId, clientId, !prog.clientVisible);
+    setVisibilityToggling(null);
+    loadProgramsProgress();
+  };
+
   useEffect(() => {
     if (!clientId) return;
     fetchMeasurements(clientId);
@@ -122,8 +145,13 @@ export default function ClientProgressScreen() {
     loadProgramsProgress();
   }, [clientId]);
 
+  useFocusEffect(useCallback(() => {
+    if (clientId && coachId) fetchClientDocuments(coachId, clientId);
+  }, [clientId, coachId]));
+
   const sections: { key: Section; label: string }[] = [
     { key: 'programs', label: t('progress.programs') },
+    { key: 'documents', label: 'Documents' },
     { key: 'measurements', label: t('progress.measurements') },
     { key: 'strength', label: t('progress.strength') },
     { key: 'photos', label: t('progress.photos') },
@@ -159,6 +187,38 @@ export default function ClientProgressScreen() {
     }
   };
 
+  const openProgramPicker = async () => {
+    setShowProgramPicker(true);
+    setPickerLoading(true);
+    await fetchMyPrograms();
+    const { data } = await supabase
+      .from('program_assignments')
+      .select('program_id')
+      .eq('client_id', clientId);
+    setPickerAssignedIds((data ?? []).map((r: any) => r.program_id));
+    setPickerLoading(false);
+  };
+
+  const handlePickerToggle = async (programId: string) => {
+    if (!clientId) return;
+    setPickerToggling(programId);
+    const isAssigned = pickerAssignedIds.includes(programId);
+    if (isAssigned) {
+      const { error } = await unassignProgram(programId, clientId);
+      if (!error) {
+        setPickerAssignedIds((ids) => ids.filter((id) => id !== programId));
+        loadProgramsProgress();
+      }
+    } else {
+      const { error } = await assignProgram(programId, clientId);
+      if (!error) {
+        setPickerAssignedIds((ids) => [...ids, programId]);
+        loadProgramsProgress();
+      }
+    }
+    setPickerToggling(null);
+  };
+
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       {/* Fullscreen photo viewer */}
@@ -190,6 +250,67 @@ export default function ClientProgressScreen() {
         </View>
       </Modal>
 
+      {/* ── Program Picker Modal ── */}
+      <Modal
+        visible={showProgramPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowProgramPicker(false)}
+      >
+        <View style={styles.pickerOverlay}>
+          <View style={styles.pickerSheet}>
+            <Text style={styles.pickerTitle}>Assign / Change Program</Text>
+            <Text style={styles.pickerSub}>Tap a program to assign or remove.</Text>
+            {pickerLoading ? (
+              <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.lg }} />
+            ) : myPrograms.length === 0 ? (
+              <Text style={styles.pickerSub}>
+                No programs yet. Create one in the Programs tab.
+              </Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 340 }} showsVerticalScrollIndicator={false}>
+                {myPrograms
+                  .map((prog) => {
+                    const isAssigned = pickerAssignedIds.includes(prog.id);
+                    const isBusy = pickerToggling === prog.id;
+                    return (
+                      <TouchableOpacity
+                        key={prog.id}
+                        style={[styles.pickerRow, isAssigned && styles.pickerRowActive]}
+                        onPress={() => handlePickerToggle(prog.id)}
+                        disabled={!!isBusy}
+                        activeOpacity={0.8}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.pickerRowName}>{prog.title}</Text>
+                          <Text style={styles.pickerRowSub}>{prog.duration_days} days</Text>
+                        </View>
+                        {isBusy ? (
+                          <ActivityIndicator size="small" color={colors.primary} />
+                        ) : isAssigned ? (
+                          <View style={styles.pickerAssignedBadge}>
+                            <Text style={styles.pickerAssignedText}>Assigned ✓</Text>
+                          </View>
+                        ) : (
+                          <View style={styles.pickerUnassignedBadge}>
+                            <Text style={styles.pickerUnassignedText}>Assign</Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+              </ScrollView>
+            )}
+            <TouchableOpacity
+              style={styles.pickerDoneBtn}
+              onPress={() => setShowProgramPicker(false)}
+            >
+              <Text style={styles.pickerDoneBtnText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Header */}
       <View style={styles.navbar}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
@@ -197,9 +318,25 @@ export default function ClientProgressScreen() {
         </TouchableOpacity>
         <View style={styles.navCenter}>
           <Text style={styles.navTitle}>{clientName ?? t('progress.clientProgress')}</Text>
-          <Text style={styles.navSubtitle}>{t('progress.clientProgress')}</Text>
+          <Text style={styles.navSubtitle}>
+            {t('progress.clientProgress')}
+            {clientMode === 'offline' ? '  ·  On Ground' : ''}
+          </Text>
         </View>
-        <View style={{ width: 40 }} />
+        {coachId && clientId ? (
+          <TouchableOpacity
+            style={styles.chatHeaderBtn}
+            onPress={() => router.push({
+              pathname: '/chat/conversation',
+              params: { coachId, clientId, otherName: clientName },
+            })}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.chatHeaderIcon}>💬</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 40 }} />
+        )}
       </View>
 
       {/* Scrollable pill tab bar */}
@@ -386,6 +523,47 @@ export default function ClientProgressScreen() {
           </View>
         )}
 
+        {/* ─── Documents ─────────────────────────────────────────────────────────────────── */}
+        {section === 'documents' && (
+          <View>
+            {clientDocuments.length === 0 ? (
+              <View style={styles.emptyState}>
+                <View style={styles.emptyIconWrap}><Text style={styles.emptyIcon}>📄</Text></View>
+                <Text style={styles.emptyText}>No documents shared with this client yet.</Text>
+              </View>
+            ) : (
+              <View style={{ gap: spacing.sm }}>
+                {clientDocuments.map((doc) => (
+                  <TouchableOpacity
+                    key={doc.id}
+                    style={styles.docCard}
+                    activeOpacity={0.8}
+                    onPress={() => previewDocument(doc)}
+                  >
+                    <View style={styles.docIconBox}>
+                      <Text style={{ fontSize: 20 }}>📄</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.docCardTitle} numberOfLines={1}>{doc.title}</Text>
+                      {!!doc.description && (
+                        <Text style={styles.docCardDesc} numberOfLines={2}>{doc.description}</Text>
+                      )}
+                      <Text style={styles.docCardMeta}>Tap to preview</Text>
+                    </View>
+                    <TouchableOpacity
+                      hitSlop={{ top: 8, bottom: 8, left: 12, right: 8 }}
+                      onPress={() => openDocument(doc, doc.coach_id)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={{ fontSize: 20 }}>⬆️</Text>
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
         {/* ─── Photos ───────────────────────────────────────────────────── */}
         {section === 'photos' && (
           <View>
@@ -424,6 +602,9 @@ export default function ClientProgressScreen() {
         {/* ─── Programs ─────────────────────────────────────────────────── */}
         {section === 'programs' && (
           <View>
+            <TouchableOpacity style={styles.assignProgramBtn} onPress={openProgramPicker}>
+              <Text style={styles.assignProgramBtnText}>Assign / Change Program</Text>
+            </TouchableOpacity>
             {programsLoading ? (
               <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xl }} />
             ) : programsProgress.length === 0 ? (
@@ -445,13 +626,31 @@ export default function ClientProgressScreen() {
                     activeOpacity={0.8}
                   >
                     <View style={styles.progCardHeader}>
-                      <Text style={styles.progCardTitle} numberOfLines={1}>
-                        {prog.programTitle}
-                      </Text>
-                      <Text style={styles.progCardMeta}>
-                        {t('progress.completedOf', { done: prog.completedDayIds.length, total: prog.totalDays })}
-                      </Text>
-                      <Text style={styles.progCardChevron}>›</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.progCardTitle} numberOfLines={1}>
+                          {prog.programTitle}
+                        </Text>
+                        <Text style={styles.progCardMeta}>
+                          {t('progress.completedOf', { done: prog.completedDayIds.length, total: prog.totalDays })}
+                        </Text>
+                      </View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <TouchableOpacity
+                          onPress={() => handleVisibilityToggle(prog)}
+                          disabled={visibilityToggling === prog.programId}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          activeOpacity={0.7}
+                        >
+                          {visibilityToggling === prog.programId
+                            ? <ActivityIndicator size="small" color={colors.primary} />
+                            : <View style={[styles.visBadge, prog.clientVisible ? styles.visBadgeOn : styles.visBadgeOff]}>
+                                <Text style={[styles.visBadgeText, prog.clientVisible ? styles.visBadgeTextOn : styles.visBadgeTextOff]}>
+                                  {prog.clientVisible ? '👁 Visible' : '🔒 Hidden'}
+                                </Text>
+                              </View>}
+                        </TouchableOpacity>
+                        <Text style={styles.progCardChevron}>›</Text>
+                      </View>
                     </View>
                     <View style={styles.progressTrack}>
                       <View style={[styles.progressFill, { width: `${Math.round(donePct)}%` as any }]} />
@@ -513,6 +712,15 @@ const styles = StyleSheet.create({
   navCenter: { flex: 1, alignItems: 'center' },
   navTitle: { fontSize: fontSize.lg, fontWeight: '800', color: colors.text, letterSpacing: -0.3 },
   navSubtitle: { fontSize: fontSize.xs, color: colors.textMuted, fontWeight: '500', marginTop: 1 },
+  chatHeaderBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chatHeaderIcon: { fontSize: 18 },
 
   // ── Tab pills ─────────────────────────────────────────────────────────────
   pillScroll: { flexGrow: 0, flexShrink: 0 },
@@ -527,7 +735,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderRadius: borderRadius.full,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.background,
     borderWidth: 1.5,
     borderColor: colors.border,
   },
@@ -737,7 +945,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   progCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  progCardTitle: { flex: 1, fontSize: fontSize.md, fontWeight: '800', color: colors.text, marginRight: spacing.sm, letterSpacing: -0.2 },
+  progCardTitle: { fontSize: fontSize.md, fontWeight: '800', color: colors.text, letterSpacing: -0.2 },
   progCardMeta: { fontSize: fontSize.sm, fontWeight: '700', color: colors.accent },
   progCardChevron: { fontSize: 22, color: colors.textMuted, fontWeight: '300', marginLeft: spacing.xs },
   progressTrack: {
@@ -764,4 +972,88 @@ const styles = StyleSheet.create({
   dayRowText: { fontSize: fontSize.sm, color: colors.textSecondary },
   dayRowTextDone: { color: colors.text, fontWeight: '600' },
   dayFeedback: { fontSize: fontSize.xs, color: colors.textMuted, fontStyle: 'italic', marginTop: 2 },
+
+  // ── Assign / Change Program button ────────────────────────────────────────
+  assignProgramBtn: {
+    backgroundColor: colors.primary + '14',
+    borderRadius: borderRadius.md,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.primary + '44',
+    marginBottom: spacing.md,
+  },
+  assignProgramBtnText: { fontSize: fontSize.sm, fontWeight: '700', color: colors.primary },
+
+  // ── Program Picker Modal ──────────────────────────────────────────────────
+  pickerOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
+  pickerSheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: spacing['2xl'],
+    paddingBottom: 40,
+    gap: spacing.md,
+  },
+  pickerTitle: { fontSize: fontSize.xl, fontWeight: '800', color: colors.text },
+  pickerSub: { fontSize: fontSize.sm, color: colors.textMuted, marginTop: -spacing.sm },
+  pickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    marginBottom: spacing.xs,
+  },
+  pickerRowActive: { borderColor: colors.primary, backgroundColor: colors.primary + '08' },
+  pickerRowName: { fontSize: fontSize.md, fontWeight: '600', color: colors.text },
+  pickerRowSub: { fontSize: fontSize.xs, color: colors.textMuted, marginTop: 2 },
+  pickerAssignedBadge: {
+    backgroundColor: colors.success + '18',
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  pickerAssignedText: { fontSize: fontSize.xs, fontWeight: '700', color: colors.success },
+  pickerUnassignedBadge: {
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  pickerUnassignedText: { fontSize: fontSize.xs, fontWeight: '700', color: '#fff' },
+  pickerDoneBtn: {
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    borderRadius: borderRadius.full,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    marginTop: spacing.xs,
+  },
+  pickerDoneBtnText: { fontSize: fontSize.md, fontWeight: '600', color: colors.textMuted },
+
+  visBadge: { borderRadius: borderRadius.sm, paddingHorizontal: 8, paddingVertical: 3 },
+  visBadgeOn: { backgroundColor: `${colors.success}22` },
+  visBadgeOff: { backgroundColor: `${colors.textMuted}22` },
+  visBadgeText: { fontSize: 11, fontWeight: '700' },
+  visBadgeTextOn: { color: colors.success },
+  visBadgeTextOff: { color: colors.textMuted },
+
+  docCard: {
+    backgroundColor: colors.card, borderRadius: borderRadius.md,
+    borderWidth: 1, borderColor: colors.border,
+    flexDirection: 'row', alignItems: 'center',
+    padding: spacing.md, gap: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  docIconBox: {
+    width: 40, height: 40, borderRadius: borderRadius.sm,
+    backgroundColor: colors.accentFaded, alignItems: 'center', justifyContent: 'center',
+  },
+  docCardTitle: { fontSize: fontSize.sm, fontWeight: '700', color: colors.text },
+  docCardDesc: { fontSize: fontSize.xs, color: colors.textMuted, marginTop: 2 },
+  docCardMeta: { fontSize: fontSize.xs, color: colors.primary, marginTop: 2, fontWeight: '600' },
 });

@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   AppState,
 } from 'react-native';
@@ -14,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useMarketplaceStore } from '../../src/stores/marketplaceStore';
+import { AppAlert, useAppAlert } from '../../src/components/AppAlert';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 import type { SubscriptionTier } from '../../src/types';
 
@@ -72,6 +72,7 @@ export default function SubscriptionScreen() {
   const [loading, setLoading] = useState(true);
   const [upgrading, setUpgrading] = useState<SubscriptionTier | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const { alertProps, showAlert } = useAppAlert();
   const awaitingPayment = useRef(false);
 
   useEffect(() => {
@@ -92,10 +93,10 @@ export default function SubscriptionScreen() {
   const currentTier: SubscriptionTier = coachSubscription?.tier ?? 'starter';
 
   const handleCancel = () => {
-    Alert.alert(
-      t('subscription.cancelTitle'),
-      t('subscription.cancelDesc'),
-      [
+    showAlert({
+      title: t('subscription.cancelTitle'),
+      message: t('subscription.cancelDesc'),
+      buttons: [
         { text: t('common.cancel'), style: 'cancel' },
         {
           text: t('subscription.cancelConfirm'),
@@ -105,19 +106,19 @@ export default function SubscriptionScreen() {
               setCancelling(true);
               const result = await cancelSubscription();
               if (result.error) {
-                Alert.alert(t('common.error'), result.error);
+                showAlert({ title: t('common.error'), message: result.error });
               } else {
-                Alert.alert(t('subscription.cancelSuccess'));
+                showAlert({ title: t('subscription.cancelSuccess') });
               }
             } catch (error) {
-              Alert.alert(t('common.error'), error instanceof Error ? error.message : String(error));
+              showAlert({ title: t('common.error'), message: error instanceof Error ? error.message : String(error) });
             } finally {
               setCancelling(false);
             }
           },
         },
       ],
-    );
+    });
   };
 
   const handleSelect = (tier: SubscriptionTier) => {
@@ -125,14 +126,14 @@ export default function SubscriptionScreen() {
 
     const isUpgrade = TIER_RANK[tier] > TIER_RANK[currentTier];
 
-    Alert.alert(
-      isUpgrade
+    showAlert({
+      title: isUpgrade
         ? t('subscription.confirmUpgrade', { tier: t(`subscription.${tier}Name` as any) })
         : t('subscription.confirmDowngrade', { tier: t(`subscription.${tier}Name` as any) }),
-      tier !== 'starter'
+      message: tier !== 'starter'
         ? t('subscription.confirmRecurringDesc', { tier: t(`subscription.${tier}Name` as any), price: t(`subscription.${tier}Price` as any) })
         : t('subscription.confirmDowngradeDesc'),
-      [
+      buttons: [
         { text: t('common.cancel'), style: 'cancel' },
         {
           text: isUpgrade ? t('subscription.upgrade') : t('subscription.downgrade'),
@@ -142,7 +143,7 @@ export default function SubscriptionScreen() {
               const result = await upgradeSubscription(tier);
 
               if (result.error) {
-                Alert.alert(t('common.error'), result.error);
+                showAlert({ title: t('common.error'), message: result.error });
               } else if (result.paymentUrl) {
                 // Paid tier — open Paymob in Safari View Controller.
                 // openAuthSessionAsync automatically closes and returns to the app
@@ -153,17 +154,17 @@ export default function SubscriptionScreen() {
                 fetchCoachSubscription();
               } else {
                 // Free tier (starter) — immediate
-                Alert.alert(t('subscription.upgradeSuccess'));
+                showAlert({ title: t('subscription.upgradeSuccess') });
               }
             } catch (error) {
-              Alert.alert(t('common.error'), error instanceof Error ? error.message : String(error));
+              showAlert({ title: t('common.error'), message: error instanceof Error ? error.message : String(error) });
             } finally {
               setUpgrading(null);
             }
           },
         },
       ],
-    );
+    });
   };
 
   if (loading) {
@@ -293,6 +294,7 @@ export default function SubscriptionScreen() {
           {t('subscription.footnote')}
         </Text>
       </ScrollView>
+      <AppAlert {...alertProps} />
     </SafeAreaView>
   );
 }

@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   TextInput,
   KeyboardAvoidingView,
@@ -16,10 +15,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSessionStore } from '../../src/stores/sessionStore';
+import { useOfflineClientStore } from '../../src/stores/offlineClientStore';
 import { useConnectionStore } from '../../src/stores/connectionStore';
+import { AppAlert, useAppAlert } from '../../src/components/AppAlert';
 import { CalendarPicker } from '../../src/components/CalendarPicker';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
-import type { Profile } from '../../src/types';
+import type { OfflineClient } from '../../src/types';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -54,11 +55,16 @@ export default function EditSessionScreen() {
     currentSession,
     fetchSessionDetail,
     updateSession,
+    addOfflineClientToSession,
+    removeOfflineClientFromSession,
     addClientToSession,
     removeClientFromSession,
     isLoading,
   } = useSessionStore();
-  const { clients, fetchCoachData } = useConnectionStore();
+  const { offlineClients, fetchOfflineClients } = useOfflineClientStore();
+  const { clients } = useConnectionStore();
+  const onGroundAppClients = clients.filter((c) => c.request?.client_mode === 'offline');
+  const { alertProps, showAlert } = useAppAlert();
 
   const todayStr = getTodayStr();
 
@@ -70,8 +76,10 @@ export default function EditSessionScreen() {
   const [duration, setDuration] = useState('60');
   const [maxClients, setMaxClients] = useState('');
   const [notes, setNotes] = useState('');
-  const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
-  const [originalClientIds, setOriginalClientIds] = useState<string[]>([]);
+  const [selectedOfflineClientIds, setSelectedOfflineClientIds] = useState<string[]>([]);
+  const [originalOfflineClientIds, setOriginalOfflineClientIds] = useState<string[]>([]);
+  const [selectedAppClientIds, setSelectedAppClientIds] = useState<string[]>([]);
+  const [originalAppClientIds, setOriginalAppClientIds] = useState<string[]>([]);
   const [bookingCutoffHours, setBookingCutoffHours] = useState(2);
   const [cancellationCutoffHours, setCancellationCutoffHours] = useState(2);
 
@@ -84,7 +92,7 @@ export default function EditSessionScreen() {
 
   useEffect(() => {
     if (sessionId) fetchSessionDetail(sessionId);
-    fetchCoachData();
+    fetchOfflineClients();
   }, [sessionId]);
 
   // Pre-fill form once session loads
@@ -107,9 +115,15 @@ export default function EditSessionScreen() {
     setBookingCutoffHours(currentSession.booking_cutoff_hours ?? 2);
     setCancellationCutoffHours(currentSession.cancellation_cutoff_hours ?? 2);
 
-    const ids = currentSession.clients.map((c) => c.id);
-    setSelectedClientIds(ids);
-    setOriginalClientIds(ids);
+    const offlineIds = (currentSession.offlineClients ?? []).map((c) => c.id);
+    setSelectedOfflineClientIds(offlineIds);
+    setOriginalOfflineClientIds(offlineIds);
+
+    const onGroundAppIds = (currentSession.clients ?? [])
+      .filter((c) => onGroundAppClients.some((ac) => ac.profile.id === c.id))
+      .map((c) => c.id);
+    setSelectedAppClientIds(onGroundAppIds);
+    setOriginalAppClientIds(onGroundAppIds);
 
     // Sync picker view to session month
     const [y, m] = currentSession.date.split('-').map(Number);
@@ -117,10 +131,28 @@ export default function EditSessionScreen() {
     setPickerMonth(m);
   }, [currentSession?.id]);
 
-  function toggleClient(id: string) {
-    setSelectedClientIds((prev) =>
-      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id],
-    );
+  function toggleOfflineClient(id: string) {
+    setSelectedOfflineClientIds((prev) => {
+      if (prev.includes(id)) return prev.filter((c) => c !== id);
+      const max = currentSession?.max_clients ?? null;
+      const pureOnlineCount = (currentSession?.clients ?? []).filter(
+        (c) => !onGroundAppClients.some((ac) => ac.profile.id === c.id),
+      ).length;
+      if (max !== null && pureOnlineCount + selectedAppClientIds.length + prev.length >= max) return prev;
+      return [...prev, id];
+    });
+  }
+
+  function toggleAppClient(id: string) {
+    setSelectedAppClientIds((prev) => {
+      if (prev.includes(id)) return prev.filter((c) => c !== id);
+      const max = currentSession?.max_clients ?? null;
+      const pureOnlineCount = (currentSession?.clients ?? []).filter(
+        (c) => !onGroundAppClients.some((ac) => ac.profile.id === c.id),
+      ).length;
+      if (max !== null && pureOnlineCount + prev.length + selectedOfflineClientIds.length >= max) return prev;
+      return [...prev, id];
+    });
   }
 
   function to24h(): number {
@@ -142,11 +174,11 @@ export default function EditSessionScreen() {
     if (!sessionId) return;
 
     const timeError = validateTime();
-    if (timeError) { Alert.alert(t('common.error'), timeError); return; }
+    if (timeError) { showAlert({ title: t('common.error'), message: timeError }); return; }
 
     const durationNum = parseInt(duration, 10);
     if (!durationNum || durationNum < 5) {
-      Alert.alert(t('common.error'), t('schedule.duration') + ' must be at least 5');
+      showAlert({ title: t('common.error'), message: t('schedule.duration') + ' must be at least 5' });
       return;
     }
 
@@ -154,7 +186,7 @@ export default function EditSessionScreen() {
 
     const maxClientsNum = maxClients.trim() ? parseInt(maxClients, 10) : null;
     if (maxClientsNum !== null && (isNaN(maxClientsNum) || maxClientsNum < 1)) {
-      Alert.alert(t('common.error'), t('schedule.maxClients') + ' must be at least 1');
+      showAlert({ title: t('common.error'), message: t('schedule.maxClients') + ' must be at least 1' });
       return;
     }
 
@@ -173,20 +205,33 @@ export default function EditSessionScreen() {
     if (updateError) {
       setSaving(false);
       const msg = updateError === 'overlap' ? t('schedule.overlapError') : updateError;
-      Alert.alert(t('common.error'), msg);
+      showAlert({ title: t('common.error'), message: msg });
       return;
     }
 
-    // Participant diff
-    const toAdd = selectedClientIds.filter((id) => !originalClientIds.includes(id));
-    const toRemove = originalClientIds.filter((id) => !selectedClientIds.includes(id));
+    // Offline participant diff
+    const offlineToAdd = selectedOfflineClientIds.filter((id) => !originalOfflineClientIds.includes(id));
+    const offlineToRemove = originalOfflineClientIds.filter((id) => !selectedOfflineClientIds.includes(id));
 
-    await Promise.all([
-      ...toAdd.map((id) => addClientToSession(sessionId, id)),
-      ...toRemove.map((id) => removeClientFromSession(sessionId, id)),
-    ]);
+    const addErrors = await Promise.all(
+      offlineToAdd.map((id) => {
+        const oc = offlineClients.find((c) => c.id === id);
+        return oc ? addOfflineClientToSession(sessionId, id, oc) : Promise.resolve({ error: null });
+      }),
+    );
+    await Promise.all(offlineToRemove.map((id) => removeOfflineClientFromSession(sessionId, id)));
+
+    // App on-ground participant diff
+    const appToAdd = selectedAppClientIds.filter((id) => !originalAppClientIds.includes(id));
+    const appToRemove = originalAppClientIds.filter((id) => !selectedAppClientIds.includes(id));
+    const appAddErrors = await Promise.all(appToAdd.map((id) => addClientToSession(sessionId, id)));
+    await Promise.all(appToRemove.map((id) => removeClientFromSession(sessionId, id)));
 
     setSaving(false);
+    if (addErrors.some((r) => r.error === 'session_full') || appAddErrors.some((r) => r.error === 'session_full')) {
+      showAlert({ title: t('common.error'), message: 'Session is at full capacity. Some clients were not added.' });
+      return;
+    }
     router.back();
   }
 
@@ -341,34 +386,60 @@ export default function EditSessionScreen() {
             <Text style={styles.fieldHint}>{t('schedule.cancellationCutoffHint')}</Text>
           </View>
 
-          {/* ── Participants ── */}
+          {/* ── On Ground Participants ── */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>{t('schedule.participants')}</Text>
-            {clients.length === 0 ? (
+            <Text style={styles.fieldLabel}>On Ground Clients</Text>
+            {offlineClients.length === 0 && onGroundAppClients.length === 0 ? (
               <View style={styles.emptyClients}>
-                <Text style={styles.emptyClientsText}>{t('schedule.noParticipants')}</Text>
+                <Text style={styles.emptyClientsText}>No on ground clients. Add them in the Clients tab.</Text>
               </View>
             ) : (
-              clients.map(({ profile: p }: { profile: Profile }) => {
-                const isSelected = selectedClientIds.includes(p.id);
-                return (
-                  <TouchableOpacity
-                    key={p.id}
-                    style={[styles.clientRow, isSelected && styles.clientRowSelected]}
-                    onPress={() => toggleClient(p.id)}
-                    activeOpacity={0.8}
-                  >
-                    <Avatar name={p.display_name} />
-                    <View style={styles.clientInfo}>
-                      <Text style={styles.clientName}>{p.display_name}</Text>
-                      <Text style={styles.clientUsername}>@{p.username}</Text>
-                    </View>
-                    <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-                      {isSelected && <Text style={styles.checkmark}>✓</Text>}
-                    </View>
-                  </TouchableOpacity>
-                );
-              })
+              <>
+                {onGroundAppClients.map((c) => {
+                  const isSelected = selectedAppClientIds.includes(c.profile.id);
+                  return (
+                    <TouchableOpacity
+                      key={c.profile.id}
+                      style={[styles.clientRow, isSelected && styles.clientRowSelected]}
+                      onPress={() => toggleAppClient(c.profile.id)}
+                      activeOpacity={0.8}
+                    >
+                      <Avatar name={c.profile.display_name} />
+                      <View style={styles.clientInfo}>
+                        <Text style={styles.clientName}>{c.profile.display_name}</Text>
+                        <View style={[styles.offlineBadge, { backgroundColor: colors.accentFaded }]}>
+                          <Text style={[styles.offlineBadgeText, { color: colors.primary }]}>On Ground · App</Text>
+                        </View>
+                      </View>
+                      <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                        {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+                {offlineClients.map((oc: OfflineClient) => {
+                  const isSelected = selectedOfflineClientIds.includes(oc.id);
+                  return (
+                    <TouchableOpacity
+                      key={oc.id}
+                      style={[styles.clientRow, isSelected && styles.clientRowSelected]}
+                      onPress={() => toggleOfflineClient(oc.id)}
+                      activeOpacity={0.8}
+                    >
+                      <Avatar name={oc.display_name} />
+                      <View style={styles.clientInfo}>
+                        <Text style={styles.clientName}>{oc.display_name}</Text>
+                        <View style={styles.offlineBadge}>
+                          <Text style={styles.offlineBadgeText}>On Ground · No App</Text>
+                        </View>
+                      </View>
+                      <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                        {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </>
             )}
           </View>
 
@@ -434,6 +505,7 @@ export default function EditSessionScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+      <AppAlert {...alertProps} />
     </SafeAreaView>
   );
 }
@@ -551,6 +623,16 @@ const styles = StyleSheet.create({
   },
   checkboxSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
   checkmark: { color: colors.textInverse, fontSize: 12, fontWeight: '700' },
+
+  offlineBadge: {
+    marginTop: 3,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.warning + '22',
+    borderRadius: borderRadius.full,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  offlineBadgeText: { fontSize: 10, fontWeight: '700', color: colors.warning },
 
   avatar: {
     backgroundColor: colors.primary + '22',

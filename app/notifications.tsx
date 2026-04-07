@@ -7,11 +7,11 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useNotificationStore } from '../src/stores/notificationStore';
+import { AppAlert, useAppAlert } from '../src/components/AppAlert';
 import { colors, fontSize, spacing, borderRadius } from '../src/constants/theme';
 import type { Notification } from '../src/types';
 
@@ -85,6 +85,7 @@ function NotificationRow({
 export default function NotificationsScreen() {
   const { notifications, unreadCount, isLoading, fetchNotifications, markAsRead, markAllAsRead, clearAll } =
     useNotificationStore();
+  const { alertProps, showAlert } = useAppAlert();
 
   useEffect(() => { fetchNotifications(); }, []);
 
@@ -100,11 +101,15 @@ export default function NotificationsScreen() {
   }, [markAllAsRead]);
 
   const handleClearAll = useCallback(() => {
-    Alert.alert('Clear all notifications', 'This will permanently delete all notifications.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Clear all', style: 'destructive', onPress: () => clearAll() },
-    ]);
-  }, [clearAll]);
+    showAlert({
+      title: 'Clear all notifications',
+      message: 'This will permanently delete all notifications.',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Clear all', style: 'destructive', onPress: () => clearAll() },
+      ],
+    });
+  }, [clearAll, showAlert]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -158,6 +163,7 @@ export default function NotificationsScreen() {
           contentContainerStyle={styles.list}
         />
       )}
+      <AppAlert {...alertProps} />
     </SafeAreaView>
   );
 }

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, router } from 'expo-router';
 import { useAuthStore } from '../../src/stores/authStore';
+import { useConnectionStore } from '../../src/stores/connectionStore';
 import { useNotificationStore } from '../../src/stores/notificationStore';
 import { supabase } from '../../src/lib/supabase';
 import { colors, fontSize, spacing, borderRadius } from '../../src/constants/theme';
@@ -43,6 +44,9 @@ interface UpcomingSessionItem {
   date: string;
   start_time: string;
   notes?: string | null;
+  max_clients?: number | null;
+  onlineCount?: number;
+  offlineCount?: number;
 }
 
 function formatSessionTime(time: string): string {
@@ -81,6 +85,7 @@ function formatSessionDate(date: string): string {
 export default function HomeScreen() {
   const { t } = useTranslation();
   const { profile } = useAuthStore();
+  const { myClientMode } = useConnectionStore();
   const { unreadCount, fetchNotifications } = useNotificationStore();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [upcomingSessions, setUpcomingSessions] = useState<UpcomingSessionItem[]>([]);
@@ -91,17 +96,11 @@ export default function HomeScreen() {
     programId: string;
     exercises: Array<{ exercise_name: string; sets: number; reps: string }>;
   } | null>(null);
-  const [activePrograms, setActivePrograms] = useState<Array<{
-    id: string;
-    program_id: string;
-    current_day: number;
-    completedCount: number;
-    program: { title: string; duration_days: number };
-  }>>([]);
 
   if (!profile) return null;
 
   const isCoach = profile.role === 'coach';
+  const isOnGroundClient = !isCoach && myClientMode === 'offline';
 
   useFocusEffect(
     useCallback(() => {
@@ -110,7 +109,9 @@ export default function HomeScreen() {
       let isMounted = true;
 
       const loadDashboard = async () => {
-      const today = new Date().toISOString().slice(0, 10);
+      const now = new Date();
+      const d = now;
+      const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
       if (isCoach) {
         const [clientsRes, programsRes, sessionsRes] = await Promise.all([
@@ -125,13 +126,13 @@ export default function HomeScreen() {
             .eq('creator_id', profile.id),
           supabase
             .from('sessions')
-            .select('id, date, start_time, notes')
+            .select('id, date, start_time, notes, max_clients, session_clients(id), session_offline_clients(id)')
             .eq('coach_id', profile.id)
             .eq('status', 'scheduled')
             .gte('date', today)
             .order('date', { ascending: true })
             .order('start_time', { ascending: true })
-            .limit(3),
+            .limit(5),
         ]);
 
         if (!isMounted) return;
@@ -142,20 +143,27 @@ export default function HomeScreen() {
           primaryLabel: t('home.activeClients'),
           secondaryLabel: t('home.activePrograms'),
         });
-        setUpcomingSessions((sessionsRes.data as UpcomingSessionItem[] | null) ?? []);
-        setTodayWorkout(null);
+
+        const nowC = new Date();
+        const filteredCoachSessions = ((sessionsRes.data as any[] | null) ?? []).filter(
+          (s: any) => new Date(`${s.date}T${s.start_time}`) > nowC,
+        ).slice(0, 3).map((s: any) => ({
+          id: s.id,
+          date: s.date,
+          start_time: s.start_time,
+          notes: s.notes,
+          max_clients: s.max_clients ?? null,
+          onlineCount: (s.session_clients ?? []).length,
+          offlineCount: (s.session_offline_clients ?? []).length,
+        } as UpcomingSessionItem));
+        setUpcomingSessions(filteredCoachSessions);
         return;
       }
 
-      const [assignmentsRes, workoutsRes, sessionIdsRes] = await Promise.all([
-        supabase
-          .from('program_assignments')
-          .select('id, program_id, current_day, program:programs(id, title, duration_days)', { count: 'exact' })
-          .eq('client_id', profile.id)
-          .order('started_at', { ascending: false }),
+      const [workoutsRes, sessionIdsRes] = await Promise.all([
         supabase
           .from('workout_logs')
-          .select('program_id, day_id')
+          .select('id', { count: 'exact', head: true })
           .eq('client_id', profile.id),
         supabase
           .from('session_clients')
@@ -164,15 +172,9 @@ export default function HomeScreen() {
       ]);
 
       const sessionIds = (sessionIdsRes.data ?? []).map((item: any) => item.session_id as string);
-      const workoutsData = (workoutsRes.data ?? []) as Array<{ program_id: string; day_id: string }>;
 
-      // Per-program completion count
-      const logCountByProgram: Record<string, number> = {};
-      for (const log of workoutsData) {
-        logCountByProgram[log.program_id] = (logCountByProgram[log.program_id] ?? 0) + 1;
-      }
-
-      const sessionsRes = sessionIds.length > 0
+      // Upcoming sessions (used by both client types)
+      const upcomingRes = sessionIds.length > 0
         ? await supabase
             .from('sessions')
             .select('id, date, start_time, notes')
@@ -181,72 +183,107 @@ export default function HomeScreen() {
             .gte('date', today)
             .order('date', { ascending: true })
             .order('start_time', { ascending: true })
-            .limit(3)
+            .limit(5)
         : { data: [] };
 
       if (!isMounted) return;
 
-      const rawAssignments = (assignmentsRes.data ?? []) as unknown as Array<{
-        id: string;
-        program_id: string;
-        current_day: number;
-        program: { title: string; duration_days: number } | null;
-      }>;
-      const validAssignments = rawAssignments.filter((a) => a.program != null);
-      const firstAssignment = validAssignments[0];
+      const nowCl = new Date();
+      const filteredClientSessions = ((upcomingRes.data as UpcomingSessionItem[] | null) ?? [])
+        .filter((s) => new Date(`${s.date}T${s.start_time}`) > nowCl)
+        .slice(0, 3);
+      setUpcomingSessions(filteredClientSessions);
 
-      setStats({
-        primaryCount: assignmentsRes.count ?? 0,
-        secondaryCount: workoutsData.length,
-        primaryLabel: t('home.activePrograms'),
-        secondaryLabel: t('home.daysDone'),
-      });
-      setActivePrograms(validAssignments.map((a) => ({
-        ...a,
-        program: a.program!,
-        completedCount: logCountByProgram[a.program_id] ?? 0,
-      })));
-      setUpcomingSessions((sessionsRes.data as UpcomingSessionItem[] | null) ?? []);
+      if (isOnGroundClient) {
+        // On Ground: sessions done count
+        const sessionsDone = sessionIds.length > 0
+          ? ((await supabase
+              .from('sessions')
+              .select('id', { count: 'exact', head: true })
+              .in('id', sessionIds)
+              .eq('status', 'completed')).count ?? 0)
+          : 0;
 
-      // Find the next incomplete workout day for the first active program
-      if (firstAssignment?.program) {
-        const completedDayIdsForProgram = new Set(
-          workoutsData
-            .filter((l) => l.program_id === firstAssignment.program_id)
-            .map((l) => l.day_id),
-        );
-
-        const { data: allDays } = await supabase
-          .from('program_days')
-          .select('id, day_number')
-          .eq('program_id', firstAssignment.program_id)
-          .order('day_number', { ascending: true });
+        if (!isMounted) return;
+        setStats({
+          primaryCount: sessionsDone,
+          secondaryCount: filteredClientSessions.length,
+          primaryLabel: 'Sessions Done',
+          secondaryLabel: t('home.upcomingSessions'),
+        });
+        setTodayWorkout(null);
+      } else {
+        // Online: programs + days done + next workout
+        const [assignmentsRes] = await Promise.all([
+          supabase
+            .from('program_assignments')
+            .select('id, program_id, current_day, program:programs(id, title, duration_days)', { count: 'exact' })
+            .eq('client_id', profile.id)
+            .order('started_at', { ascending: false }),
+        ]);
 
         if (!isMounted) return;
 
-        const nextDay = (allDays ?? []).find((d: any) => !completedDayIdsForProgram.has(d.id));
+        const rawAssignments = (assignmentsRes.data ?? []) as unknown as Array<{
+          id: string;
+          program_id: string;
+          current_day: number;
+          program: { title: string; duration_days: number } | null;
+        }>;
+        const validAssignments = rawAssignments.filter((a) => a.program != null);
+        const firstAssignment = validAssignments[0];
 
-        if (nextDay) {
-          const { data: exercises } = await supabase
-            .from('program_exercises')
-            .select('exercise_name, sets, reps')
-            .eq('day_id', nextDay.id)
-            .order('order_index', { ascending: true })
-            .limit(3);
+        setStats({
+          primaryCount: assignmentsRes.count ?? 0,
+          secondaryCount: workoutsRes.count ?? 0,
+          primaryLabel: t('home.activePrograms'),
+          secondaryLabel: t('home.daysDone'),
+        });
+
+        // Next workout
+        if (firstAssignment?.program) {
+          const { data: workoutLogs } = await supabase
+            .from('workout_logs')
+            .select('day_id')
+            .eq('client_id', profile.id)
+            .eq('program_id', firstAssignment.program_id);
 
           if (!isMounted) return;
-          setTodayWorkout({
-            programTitle: firstAssignment.program!.title,
-            currentDay: nextDay.day_number,
-            totalDays: firstAssignment.program!.duration_days,
-            programId: firstAssignment.program_id,
-            exercises: (exercises ?? []) as Array<{ exercise_name: string; sets: number; reps: string }>,
-          });
+
+          const completedDayIds = new Set((workoutLogs ?? []).map((l: any) => l.day_id as string));
+
+          const { data: allDays } = await supabase
+            .from('program_days')
+            .select('id, day_number')
+            .eq('program_id', firstAssignment.program_id)
+            .order('day_number', { ascending: true });
+
+          if (!isMounted) return;
+
+          const nextDay = (allDays ?? []).find((d: any) => !completedDayIds.has(d.id));
+
+          if (nextDay) {
+            const { data: exercises } = await supabase
+              .from('program_exercises')
+              .select('exercise_name, sets, reps')
+              .eq('day_id', nextDay.id)
+              .order('order_index', { ascending: true })
+              .limit(3);
+
+            if (!isMounted) return;
+            setTodayWorkout({
+              programTitle: firstAssignment.program!.title,
+              currentDay: nextDay.day_number,
+              totalDays: firstAssignment.program!.duration_days,
+              programId: firstAssignment.program_id,
+              exercises: (exercises ?? []) as Array<{ exercise_name: string; sets: number; reps: string }>,
+            });
+          } else {
+            setTodayWorkout(null);
+          }
         } else {
           setTodayWorkout(null);
         }
-      } else {
-        setTodayWorkout(null);
       }
     };
 
@@ -255,7 +292,7 @@ export default function HomeScreen() {
       return () => {
         isMounted = false;
       };
-    }, [isCoach, profile.id, t, fetchNotifications])
+    }, [isCoach, isOnGroundClient, profile.id, t, fetchNotifications])
   );
 
   return (
@@ -297,99 +334,114 @@ export default function HomeScreen() {
 
         <View style={styles.statsRow}>
           <StatCard
-            label={stats?.primaryLabel ?? (isCoach ? t('home.activeClients') : t('home.activePrograms'))}
+            label={stats?.primaryLabel ?? (isCoach ? t('home.activeClients') : isOnGroundClient ? 'Sessions Done' : t('home.activePrograms'))}
             value={String(stats?.primaryCount ?? 0)}
             accent
-            onPress={() => router.push(isCoach ? '/(tabs)/clients' : '/(tabs)/programs')}
+            onPress={() => {
+              if (isCoach) router.push('/(tabs)/clients');
+              else if (isOnGroundClient) router.push({ pathname: '/coach/offline-client-detail', params: { viewOnly: 'true' } });
+              else router.push('/(tabs)/programs');
+            }}
           />
           <StatCard
-            label={stats?.secondaryLabel ?? (isCoach ? t('home.activePrograms') : 'Workouts')}
+            label={stats?.secondaryLabel ?? (isCoach ? t('home.activePrograms') : isOnGroundClient ? t('home.upcomingSessions') : t('home.daysDone'))}
             value={String(stats?.secondaryCount ?? 0)}
-            onPress={() => router.push(isCoach ? '/(tabs)/programs' : '/(tabs)/progress')}
+            onPress={() => {
+              if (isCoach) router.push('/(tabs)/programs');
+              else if (isOnGroundClient) router.push({ pathname: '/coach/offline-client-detail', params: { viewOnly: 'true' } });
+              else router.push('/(tabs)/progress');
+            }}
           />
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('home.upcomingSessions')}</Text>
-          {upcomingSessions.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyIcon}>📅</Text>
-              <Text style={styles.emptyText}>{t('home.noSessions')}</Text>
-            </View>
-          ) : (
-            upcomingSessions.map((session) => (
-              <TouchableOpacity
-                key={session.id}
-                style={styles.sessionCard}
-                onPress={() => router.push({ pathname: '/sessions/detail', params: { sessionId: session.id } })}
-                activeOpacity={0.8}
-              >
-                <View style={styles.sessionCardHeader}>
-                  <View style={styles.sessionCalendarBadge}>
-                    <Text style={styles.sessionCalendarDay}>{formatSessionDate(session.date).split(' ')[2] ?? ''}</Text>
-                    <Text style={styles.sessionCalendarMonth}>{formatSessionDate(session.date).split(' ')[1] ?? ''}</Text>
-                  </View>
-                  <View style={styles.sessionContent}>
-                    <Text style={styles.sessionDate}>{formatSessionDate(session.date)}</Text>
-                    <Text style={styles.sessionTime}>{formatSessionTime(session.start_time)}</Text>
-                    {!!session.notes && <Text style={styles.sessionNotes}>{session.notes}</Text>}
-                  </View>
-                  <Text style={styles.sessionChevron}>›</Text>
-                </View>
-              </TouchableOpacity>
-            ))
-          )}
-        </View>
-
-        {!isCoach && (
-          <>
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>{t('home.nextWorkout')}</Text>
-              {todayWorkout ? (
+        {(isCoach || isOnGroundClient) && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{t('home.upcomingSessions')}</Text>
+            {upcomingSessions.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyIcon}>📅</Text>
+                <Text style={styles.emptyText}>{t('home.noSessions')}</Text>
+              </View>
+            ) : (
+              upcomingSessions.map((session) => (
                 <TouchableOpacity
-                  style={styles.workoutCard}
-                  onPress={() =>
-                    router.push({ pathname: '/programs/detail', params: { id: todayWorkout.programId } })
-                  }
+                  key={session.id}
+                  style={styles.sessionCard}
+                  onPress={() => router.push({ pathname: '/sessions/detail', params: { sessionId: session.id } })}
                   activeOpacity={0.8}
                 >
-                  <View style={styles.workoutCardHeader}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.workoutTitle}>{todayWorkout.programTitle}</Text>
-                      <Text style={styles.workoutDayMeta}>
-                        Day {todayWorkout.currentDay} of {todayWorkout.totalDays}
-                      </Text>
+                  <View style={styles.sessionCardHeader}>
+                    <View style={styles.sessionCalendarBadge}>
+                      <Text style={styles.sessionCalendarDay}>{formatSessionDate(session.date).split(' ')[2] ?? ''}</Text>
+                      <Text style={styles.sessionCalendarMonth}>{formatSessionDate(session.date).split(' ')[1] ?? ''}</Text>
                     </View>
-                    <Text style={styles.workoutArrow}>›</Text>
+                    <View style={styles.sessionContent}>
+                      <Text style={styles.sessionDate}>{formatSessionDate(session.date)}</Text>
+                      <Text style={styles.sessionTime}>{formatSessionTime(session.start_time)}</Text>
+                      {!!session.notes && <Text style={styles.sessionNotes}>{session.notes}</Text>}
+                    </View>
+                    {isCoach && (session.onlineCount !== undefined || session.offlineCount !== undefined) && (
+                      <View style={styles.sessionCapacityBadge}>
+                        <Text style={styles.sessionCapacityText}>
+                          {(session.onlineCount ?? 0) + (session.offlineCount ?? 0)}
+                          {session.max_clients != null ? `/${session.max_clients}` : ''}
+                        </Text>
+                      </View>
+                    )}
+                    <Text style={styles.sessionChevron}>›</Text>
                   </View>
-                  {todayWorkout.exercises.length > 0 ? (
-                    <View style={styles.workoutExerciseList}>
-                      {todayWorkout.exercises.map((ex, i) => (
-                        <View key={i} style={styles.workoutExerciseRow}>
-                          <View style={styles.workoutExerciseDot} />
-                          <Text style={styles.workoutExerciseName}>{ex.exercise_name}</Text>
-                          <Text style={styles.workoutExerciseMeta}>{ex.sets}×{ex.reps}</Text>
-                        </View>
-                      ))}
-                      {todayWorkout.exercises.length === 3 && (
-                        <Text style={styles.workoutMoreText}>+ more exercises</Text>
-                      )}
-                    </View>
-                  ) : (
-                    <Text style={styles.emptySubtext}>No exercises added for this day yet.</Text>
-                  )}
                 </TouchableOpacity>
-              ) : (
-                <View style={styles.emptyCard}>
-                  <Text style={styles.emptyIcon}>💪</Text>
-                  <Text style={styles.emptyText}>No workout scheduled</Text>
-                  <Text style={styles.emptySubtext}>
-                    Browse programs or connect with a coach
-                  </Text>
+              ))
+            )}
+          </View>
+        )}
+
+
+        {!isCoach && !isOnGroundClient && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{t('home.nextWorkout')}</Text>
+            {todayWorkout ? (
+              <TouchableOpacity
+                style={styles.workoutCard}
+                onPress={() =>
+                  router.push({ pathname: '/programs/detail', params: { id: todayWorkout.programId } })
+                }
+                activeOpacity={0.8}
+              >
+                <View style={styles.workoutCardHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.workoutTitle}>{todayWorkout.programTitle}</Text>
+                    <Text style={styles.workoutDayMeta}>
+                      Day {todayWorkout.currentDay} of {todayWorkout.totalDays}
+                    </Text>
+                  </View>
+                  <Text style={styles.workoutArrow}>›</Text>
                 </View>
-              )}
-            </View>
-          </>
+                {todayWorkout.exercises.length > 0 ? (
+                  <View style={styles.workoutExerciseList}>
+                    {todayWorkout.exercises.map((ex, i) => (
+                      <View key={i} style={styles.workoutExerciseRow}>
+                        <View style={styles.workoutExerciseDot} />
+                        <Text style={styles.workoutExerciseName}>{ex.exercise_name}</Text>
+                        <Text style={styles.workoutExerciseMeta}>{ex.sets}×{ex.reps}</Text>
+                      </View>
+                    ))}
+                    {todayWorkout.exercises.length === 3 && (
+                      <Text style={styles.workoutMoreText}>+ more exercises</Text>
+                    )}
+                  </View>
+                ) : (
+                  <Text style={styles.emptySubtext}>No exercises added for this day yet.</Text>
+                )}
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyIcon}>💪</Text>
+                <Text style={styles.emptyText}>No workout scheduled</Text>
+                <Text style={styles.emptySubtext}>Browse programs or connect with a coach</Text>
+              </View>
+            )}
+          </View>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -620,6 +672,21 @@ const styles = StyleSheet.create({
     fontWeight: '300',
     alignSelf: 'center',
     marginLeft: spacing.sm,
+  },
+  sessionCapacityBadge: {
+    backgroundColor: colors.accentFaded,
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    alignSelf: 'center',
+    marginLeft: spacing.sm,
+    minWidth: 36,
+    alignItems: 'center',
+  },
+  sessionCapacityText: {
+    fontSize: fontSize.xs,
+    fontWeight: '800',
+    color: colors.accent,
   },
   workoutCard: {
     backgroundColor: colors.surface,

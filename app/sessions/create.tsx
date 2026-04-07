@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   TextInput,
   KeyboardAvoidingView,
@@ -16,10 +15,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSessionStore } from '../../src/stores/sessionStore';
+import { useOfflineClientStore } from '../../src/stores/offlineClientStore';
 import { useConnectionStore } from '../../src/stores/connectionStore';
+import { AppAlert, useAppAlert } from '../../src/components/AppAlert';
 import { CalendarPicker } from '../../src/components/CalendarPicker';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
-import type { Profile } from '../../src/types';
+import type { OfflineClient } from '../../src/types';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -51,7 +52,9 @@ export default function CreateSessionScreen() {
   const router = useRouter();
   const { initialDate } = useLocalSearchParams<{ initialDate?: string }>();
   const { createSession } = useSessionStore();
-  const { clients, fetchCoachData } = useConnectionStore();
+  const { offlineClients, fetchOfflineClients } = useOfflineClientStore();
+  const { clients } = useConnectionStore();
+  const onGroundAppClients = clients.filter((c) => c.request?.client_mode === 'offline');
 
   const todayStr = getTodayStr();
   // Use the date the coach tapped in the calendar, falling back to today
@@ -65,7 +68,9 @@ export default function CreateSessionScreen() {
   const [duration, setDuration] = useState('60');
   const [maxClients, setMaxClients] = useState('');
   const [notes, setNotes] = useState('');
-  const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
+  const [selectedOfflineClientIds, setSelectedOfflineClientIds] = useState<string[]>([]);
+  const [selectedAppClientIds, setSelectedAppClientIds] = useState<string[]>([]);
+  const { alertProps, showAlert } = useAppAlert();
   const [bookingCutoffHours, setBookingCutoffHours] = useState(2);
   const [cancellationCutoffHours, setCancellationCutoffHours] = useState(2);
 
@@ -83,13 +88,27 @@ export default function CreateSessionScreen() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetchCoachData();
+    fetchOfflineClients();
   }, []);
 
-  function toggleClient(id: string) {
-    setSelectedClientIds((prev) =>
-      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id],
-    );
+  function toggleOfflineClient(id: string) {
+    setSelectedOfflineClientIds((prev) => {
+      if (prev.includes(id)) return prev.filter((c) => c !== id);
+      const maxNum = maxClients.trim() && maxClients !== '0' ? parseInt(maxClients, 10) : null;
+      const totalSelected = prev.length + selectedAppClientIds.length;
+      if (maxNum !== null && !isNaN(maxNum) && totalSelected >= maxNum) return prev;
+      return [...prev, id];
+    });
+  }
+
+  function toggleAppClient(id: string) {
+    setSelectedAppClientIds((prev) => {
+      if (prev.includes(id)) return prev.filter((c) => c !== id);
+      const maxNum = maxClients.trim() && maxClients !== '0' ? parseInt(maxClients, 10) : null;
+      const totalSelected = selectedOfflineClientIds.length + prev.length;
+      if (maxNum !== null && !isNaN(maxNum) && totalSelected >= maxNum) return prev;
+      return [...prev, id];
+    });
   }
 
   function to24h(): number {
@@ -117,13 +136,13 @@ export default function CreateSessionScreen() {
   async function handleCreate() {
     const timeError = validateTime();
     if (timeError) {
-      Alert.alert(t('common.error'), timeError);
+      showAlert({ title: t('common.error'), message: timeError });
       return;
     }
 
     const durationNum = parseInt(duration, 10);
     if (!durationNum || durationNum < 5) {
-      Alert.alert(t('common.error'), t('schedule.duration') + ' must be at least 5');
+      showAlert({ title: t('common.error'), message: t('schedule.duration') + ' must be at least 5' });
       return;
     }
 
@@ -131,7 +150,7 @@ export default function CreateSessionScreen() {
 
     const maxClientsNum = maxClients.trim() ? parseInt(maxClients, 10) : null;
     if (maxClientsNum !== null && (isNaN(maxClientsNum) || maxClientsNum < 1)) {
-      Alert.alert(t('common.error'), t('schedule.maxClients') + ' must be at least 1');
+      showAlert({ title: t('common.error'), message: t('schedule.maxClients') + ' must be at least 1' });
       return;
     }
 
@@ -142,7 +161,8 @@ export default function CreateSessionScreen() {
       duration_minutes: durationNum,
       notes: notes.trim() || null,
       max_clients: maxClientsNum,
-      client_ids: selectedClientIds,
+      client_ids: selectedAppClientIds,
+      offline_client_ids: selectedOfflineClientIds,
     });
     setSaving(false);
 
@@ -151,7 +171,7 @@ export default function CreateSessionScreen() {
         error === 'overlap'
           ? t('schedule.overlapError')
           : error;
-      Alert.alert(t('common.error'), msg);
+      showAlert({ title: t('common.error'), message: msg });
       return;
     }
 
@@ -342,35 +362,62 @@ export default function CreateSessionScreen() {
             <Text style={styles.fieldHint}>{t('schedule.cancellationCutoffHint')}</Text>
           </View>
 
-          {/* ── Participants ── */}
+          {/* ── On Ground Participants ── */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>{t('schedule.participants')}</Text>
-            {clients.length === 0 ? (
+            <Text style={styles.fieldLabel}>On Ground Clients</Text>
+            {offlineClients.length === 0 && onGroundAppClients.length === 0 ? (
               <View style={styles.emptyClients}>
-                <Text style={styles.emptyClientsText}>{t('schedule.noParticipants')}</Text>
+                <Text style={styles.emptyClientsText}>No on ground clients yet. Add them in the Clients tab.</Text>
               </View>
             ) : (
-              clients.map(({ profile: p }: { profile: Profile }) => {
-                const isSelected = selectedClientIds.includes(p.id);
-                return (
-                  <TouchableOpacity
-                    key={p.id}
-                    style={[styles.clientRow, isSelected && styles.clientRowSelected]}
-                    onPress={() => toggleClient(p.id)}
-                    activeOpacity={0.8}
-                  >
-                    {isSelected && <View style={styles.clientAccentBar} />}
-                    <Avatar name={p.display_name} size={40} />
-                    <View style={styles.clientInfo}>
-                      <Text style={styles.clientName}>{p.display_name}</Text>
-                      <Text style={styles.clientUsername}>@{p.username}</Text>
-                    </View>
-                    <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-                      {isSelected && <Text style={styles.checkmark}>✓</Text>}
-                    </View>
-                  </TouchableOpacity>
-                );
-              })
+              <>
+                {onGroundAppClients.map((c) => {
+                  const isSelected = selectedAppClientIds.includes(c.profile.id);
+                  return (
+                    <TouchableOpacity
+                      key={c.profile.id}
+                      style={[styles.clientRow, isSelected && styles.clientRowSelected]}
+                      onPress={() => toggleAppClient(c.profile.id)}
+                      activeOpacity={0.8}
+                    >
+                      {isSelected && <View style={styles.clientAccentBar} />}
+                      <Avatar name={c.profile.display_name} size={40} />
+                      <View style={styles.clientInfo}>
+                        <Text style={styles.clientName}>{c.profile.display_name}</Text>
+                        <View style={[styles.offlineBadge, { backgroundColor: colors.accentFaded }]}>
+                          <Text style={[styles.offlineBadgeText, { color: colors.primary }]}>On Ground · App</Text>
+                        </View>
+                      </View>
+                      <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                        {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+                {offlineClients.map((oc: OfflineClient) => {
+                  const isSelected = selectedOfflineClientIds.includes(oc.id);
+                  return (
+                    <TouchableOpacity
+                      key={oc.id}
+                      style={[styles.clientRow, isSelected && styles.clientRowSelected]}
+                      onPress={() => toggleOfflineClient(oc.id)}
+                      activeOpacity={0.8}
+                    >
+                      {isSelected && <View style={styles.clientAccentBar} />}
+                      <Avatar name={oc.display_name} size={40} />
+                      <View style={styles.clientInfo}>
+                        <Text style={styles.clientName}>{oc.display_name}</Text>
+                        <View style={styles.offlineBadge}>
+                          <Text style={styles.offlineBadgeText}>On Ground · No App</Text>
+                        </View>
+                      </View>
+                      <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                        {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </>
             )}
           </View>
 
@@ -436,6 +483,7 @@ export default function CreateSessionScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+      <AppAlert {...alertProps} />
     </SafeAreaView>
   );
 }
@@ -624,6 +672,15 @@ const styles = StyleSheet.create({
   clientInfo: { flex: 1, marginLeft: spacing.md },
   clientName: { fontSize: fontSize.sm, fontWeight: '700', color: colors.text },
   clientUsername: { fontSize: fontSize.xs, color: colors.textMuted, marginTop: 1 },
+  offlineBadge: {
+    marginTop: 3,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.warning + '22',
+    borderRadius: borderRadius.full,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  offlineBadgeText: { fontSize: 10, fontWeight: '700', color: colors.warning },
   checkbox: {
     width: 24,
     height: 24,

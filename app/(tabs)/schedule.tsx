@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -17,6 +16,7 @@ import { useSessionStore } from '../../src/stores/sessionStore';
 import { isWithinNoticeWindow, isBookingClosed } from '../../src/stores/sessionStore';
 import { useConnectionStore } from '../../src/stores/connectionStore';
 import { CalendarPicker } from '../../src/components/CalendarPicker';
+import { AppAlert, useAppAlert } from '../../src/components/AppAlert';
 import { colors, fontSize, spacing, borderRadius } from '../../src/constants/theme';
 import type { SessionWithClients } from '../../src/stores/sessionStore';
 
@@ -76,9 +76,13 @@ function SessionCard({
   const { t } = useTranslation();
   const sColor = statusColor(session.status);
 
+  const allClientNames = [
+    ...session.clients.map((c) => c.display_name),
+    ...(session.offlineClients ?? []).map((oc) => oc.display_name),
+  ];
   const subtitle = isCoach
-    ? session.clients.length > 0
-      ? session.clients.map((c) => c.display_name).join(', ')
+    ? allClientNames.length > 0
+      ? allClientNames.join(', ')
       : t('schedule.noParticipants')
     : '';
 
@@ -126,7 +130,7 @@ function SessionCard({
         <View style={styles.cardBottomRow}>
           {isCoach && session.max_clients != null && (
             <View style={styles.capacityTag}>
-              <Text style={styles.capacityTagText}>{session.clients.length}/{session.max_clients} clients</Text>
+              <Text style={styles.capacityTagText}>{(session.clients.length) + (session.offlineClients?.length ?? 0)}/{session.max_clients} clients</Text>
             </View>
           )}
           <View style={{ flex: 1 }} />
@@ -229,6 +233,7 @@ export default function ScheduleScreen() {
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [cancelingId, setCancelingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const { alertProps, showAlert } = useAppAlert();
 
   const load = useCallback(
     (year: number, month: number) => {
@@ -281,12 +286,12 @@ export default function ScheduleScreen() {
       (s) => s.date === session.date && s.status === 'scheduled',
     );
     if (alreadyBookedToday) {
-      Alert.alert(t('common.error'), t('schedule.oncePerDay'));
+      showAlert({ title: t('common.error'), message: t('schedule.oncePerDay') });
       return;
     }
 
     if (isBookingClosed(session)) {
-      Alert.alert(t('common.error'), t('schedule.bookingClosed'));
+      showAlert({ title: t('common.error'), message: t('schedule.bookingClosed') });
       return;
     }
 
@@ -296,15 +301,15 @@ export default function ScheduleScreen() {
 
     if (error) {
       const msg = error === 'already_booked' ? t('schedule.alreadyBooked') : error;
-      Alert.alert(t('common.error'), msg);
+      showAlert({ title: t('common.error'), message: msg });
     }
   }
 
   async function handleDelete(session: SessionWithClients) {
-    Alert.alert(
-      t('schedule.cancelled'),
-      t('schedule.confirmDeleteSession', { defaultValue: 'Permanently delete this cancelled session?' }),
-      [
+    showAlert({
+      title: t('schedule.cancelled'),
+      message: t('schedule.confirmDeleteSession', { defaultValue: 'Permanently delete this cancelled session?' }),
+      buttons: [
         { text: t('common.back'), style: 'cancel' },
         {
           text: t('common.delete'),
@@ -313,22 +318,22 @@ export default function ScheduleScreen() {
             setDeletingId(session.id);
             const { error } = await deleteSession(session.id);
             setDeletingId(null);
-            if (error) Alert.alert(t('common.error'), error);
+            if (error) showAlert({ title: t('common.error'), message: error });
           },
         },
       ],
-    );
+    });
   }
 
   async function handleCancel(session: SessionWithClients) {
     if (isWithinNoticeWindow(session)) {
-      Alert.alert(t('schedule.cancelNotAllowed'), t('schedule.noticeError'));
+      showAlert({ title: t('schedule.cancelNotAllowed'), message: t('schedule.noticeError') });
       return;
     }
-    Alert.alert(
-      t('schedule.confirmLeave'),
-      t('schedule.leaveSession'),
-      [
+    showAlert({
+      title: t('schedule.confirmLeave'),
+      message: t('schedule.leaveSession'),
+      buttons: [
         { text: t('common.back'), style: 'cancel' },
         {
           text: t('schedule.leaveSession'),
@@ -339,7 +344,7 @@ export default function ScheduleScreen() {
             setCancelingId(null);
             if (error) {
               const message = error === 'cancel_failed' ? t('schedule.cancelBookingFailed') : error;
-              Alert.alert(t('common.error'), message);
+              showAlert({ title: t('common.error'), message });
             } else {
               // Re-fetch from DB to guarantee UI matches real state
               await fetchSessions(viewYear, viewMonth, profile!.role);
@@ -348,7 +353,7 @@ export default function ScheduleScreen() {
           },
         },
       ],
-    );
+    });
   }
 
   // Marked dates = booked sessions + available sessions (different dot types handled by CalendarPicker)
@@ -461,6 +466,7 @@ export default function ScheduleScreen() {
           )}
         </View>
       </ScrollView>
+      <AppAlert {...alertProps} />
     </SafeAreaView>
   );
 }

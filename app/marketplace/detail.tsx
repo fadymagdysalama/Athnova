@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   AppState,
 } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
@@ -14,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useMarketplaceStore } from '../../src/stores/marketplaceStore';
+import { AppAlert, useAppAlert } from '../../src/components/AppAlert';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 import type { PublicProgram, ProgramDayWithExercises } from '../../src/types';
 
@@ -40,6 +40,7 @@ export default function MarketplaceDetailScreen() {
   const [previewDay, setPreviewDay] = useState<ProgramDayWithExercises | null>(null);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
+  const { alertProps, showAlert } = useAppAlert();
   const appState = useRef(AppState.currentState);
 
   useEffect(() => {
@@ -77,43 +78,47 @@ export default function MarketplaceDetailScreen() {
       ? t('marketplace.purchaseFree', { title: program.title })
       : t('marketplace.purchaseConfirm', { title: program.title, price: program.price!.toFixed(2) });
 
-    Alert.alert(t('marketplace.purchaseTitle'), message, [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: isFree ? t('marketplace.getFree') : t('marketplace.buy', { price: program.price!.toFixed(2) }),
-        onPress: async () => {
-          try {
-            setPurchasing(true);
-            const { error, paymentUrl } = await purchaseProgram(program.id);
+    showAlert({
+      title: t('marketplace.purchaseTitle'),
+      message,
+      buttons: [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: isFree ? t('marketplace.getFree') : t('marketplace.buy', { price: program.price!.toFixed(2) }),
+          onPress: async () => {
+            try {
+              setPurchasing(true);
+              const { error, paymentUrl } = await purchaseProgram(program.id);
 
-            if (error) {
-              Alert.alert(t('common.error'), error);
-            } else if (paymentUrl) {
-              // Open Paymob in Safari View Controller; auto-closes when Paymob redirects to coachera://
-              await WebBrowser.openAuthSessionAsync(paymentUrl, 'coachera://');
-              fetchMyPurchases();
-            } else {
-              // Free program acquired
-              Alert.alert(
-                t('marketplace.purchaseSuccess'),
-                t('marketplace.purchaseSuccessHint'),
-                [
-                  {
-                    text: t('marketplace.viewProgram'),
-                    onPress: () =>
-                      router.replace({ pathname: '/programs/detail', params: { id: program.id, marketplace: '1' } }),
-                  },
-                ],
-              );
+              if (error) {
+                showAlert({ title: t('common.error'), message: error });
+              } else if (paymentUrl) {
+                // Open Paymob in Safari View Controller; auto-closes when Paymob redirects to coachera://
+                await WebBrowser.openAuthSessionAsync(paymentUrl, 'coachera://');
+                fetchMyPurchases();
+              } else {
+                // Free program acquired
+                showAlert({
+                  title: t('marketplace.purchaseSuccess'),
+                  message: t('marketplace.purchaseSuccessHint'),
+                  buttons: [
+                    {
+                      text: t('marketplace.viewProgram'),
+                      onPress: () =>
+                        router.replace({ pathname: '/programs/detail', params: { id: program.id, marketplace: '1' } }),
+                    },
+                  ],
+                });
+              }
+            } catch (error) {
+              showAlert({ title: t('common.error'), message: error instanceof Error ? error.message : String(error) });
+            } finally {
+              setPurchasing(false);
             }
-          } catch (error) {
-            Alert.alert(t('common.error'), error instanceof Error ? error.message : String(error));
-          } finally {
-            setPurchasing(false);
-          }
+          },
         },
-      },
-    ]);
+      ],
+    });
   };
 
   if (loading) {
@@ -240,6 +245,7 @@ export default function MarketplaceDetailScreen() {
           <Text style={styles.ownedNote}>{t('marketplace.alreadyPurchased')}</Text>
         )}
       </View>
+      <AppAlert {...alertProps} />
     </SafeAreaView>
   );
 }
