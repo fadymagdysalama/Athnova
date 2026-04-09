@@ -296,8 +296,9 @@ export default {
     bookingClosed: 'Booking window has closed for this session',
     hoursBeforeStart: 'hrs before start',
     recurring: 'Recurring',
-    recurringLabel: 'Weekly · 2 months',
-    recurringHint: 'Repeats every week for 2 months (max)',
+    recurringWeeks: 'Repeat for',
+    recurringWeeksUnit: 'weeks',
+    recurringMaxHint: 'Maximum 8 weeks',
     recurringCreated: '{{count}} recurring sessions created',
   },
   progress: {

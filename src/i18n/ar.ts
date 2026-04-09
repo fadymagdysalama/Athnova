@@ -294,8 +294,9 @@ export default {
     bookingClosed: 'انتهت نافذة الحجز لهذه الجلسة',
     hoursBeforeStart: 'ساعات قبل البدء',
     recurring: 'متكرر',
-    recurringLabel: 'أسبوعي · شهران',
-    recurringHint: 'يتكرر أسبوعيًا لمدة شهرين (الحد الأقصى)',
+    recurringWeeks: 'تكرار لمدة',
+    recurringWeeksUnit: 'أسابيع',
+    recurringMaxHint: 'الحد الأقصى 8 أسابيع',
     recurringCreated: 'تم إنشاء {{count}} جلسة متكررة',
   },
   progress: {

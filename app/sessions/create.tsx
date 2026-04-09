@@ -87,6 +87,7 @@ export default function CreateSessionScreen() {
 
   const [saving, setSaving] = useState(false);
   const [isRecurring, setIsRecurring] = useState(false);
+  const [recurringWeeks, setRecurringWeeks] = useState(8);
 
   useEffect(() => {
     fetchOfflineClients();
@@ -168,7 +169,7 @@ export default function CreateSessionScreen() {
         offline_client_ids: selectedOfflineClientIds,
         booking_cutoff_hours: bookingCutoffHours,
         cancellation_cutoff_hours: cancellationCutoffHours,
-      });
+      }, recurringWeeks);
       setSaving(false);
 
       if (count === 0 && error) {
@@ -297,9 +298,6 @@ export default function CreateSessionScreen() {
             <View style={styles.recurringRow}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.fieldLabel}>{t('schedule.recurring')}</Text>
-                {isRecurring && (
-                  <Text style={styles.recurringHintText}>{t('schedule.recurringHint')}</Text>
-                )}
               </View>
               <TouchableOpacity
                 style={[styles.toggle, isRecurring && styles.toggleActive]}
@@ -310,8 +308,31 @@ export default function CreateSessionScreen() {
               </TouchableOpacity>
             </View>
             {isRecurring && (
-              <View style={styles.recurringChip}>
-                <Text style={styles.recurringChipText}>↻  {t('schedule.recurringLabel')}</Text>
+              <View style={styles.recurringExpandBox}>
+                <View style={styles.recurringWeeksRow}>
+                  <Text style={styles.recurringWeeksLabel}>{t('schedule.recurringWeeks')}</Text>
+                  <View style={styles.weeksStepper}>
+                    <TouchableOpacity
+                      style={styles.weeksBtn}
+                      onPress={() => setRecurringWeeks((w) => Math.max(1, w - 1))}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.weeksBtnText}>−</Text>
+                    </TouchableOpacity>
+                    <View style={styles.weeksValueBox}>
+                      <Text style={styles.weeksValue}>{recurringWeeks}</Text>
+                      <Text style={styles.weeksUnit}>{t('schedule.recurringWeeksUnit')}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.weeksBtn}
+                      onPress={() => setRecurringWeeks((w) => Math.min(8, w + 1))}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.weeksBtnText}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                <Text style={styles.recurringMaxHint}>{t('schedule.recurringMaxHint')}</Text>
               </View>
             )}
           </View>
@@ -790,20 +811,50 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   toggleThumbActive: { alignSelf: 'flex-end' },
-  recurringChip: {
+  recurringExpandBox: {
     marginTop: spacing.md,
-    alignSelf: 'flex-start',
     backgroundColor: colors.accentFaded,
-    borderRadius: borderRadius.full,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.xl,
     borderWidth: 1,
     borderColor: colors.accent,
+    padding: spacing.md,
+    gap: spacing.xs,
   },
-  recurringChipText: {
+  recurringWeeksRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  recurringWeeksLabel: {
     fontSize: fontSize.sm,
     fontWeight: '700',
     color: colors.accent,
+  },
+  weeksStepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    overflow: 'hidden',
+  },
+  weeksBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceLight,
+  },
+  weeksBtnText: { fontSize: fontSize.lg, fontWeight: '300', color: colors.primary, lineHeight: 22 },
+  weeksValueBox: { flexDirection: 'row', alignItems: 'baseline', paddingHorizontal: spacing.md, gap: 4 },
+  weeksValue: { fontSize: fontSize.md, fontWeight: '800', color: colors.text },
+  weeksUnit: { fontSize: fontSize.xs, fontWeight: '600', color: colors.textMuted },
+  recurringMaxHint: {
+    fontSize: fontSize.xs,
+    color: colors.accent,
+    fontWeight: '600',
+    opacity: 0.7,
   },
   createBtn: {
     backgroundColor: colors.primary,

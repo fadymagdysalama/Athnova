@@ -54,8 +54,8 @@ interface SessionState {
   removeClientFromSession: (sessionId: string, clientId: string) => Promise<{ error: string | null }>;
   addOfflineClientToSession: (sessionId: string, offlineClientId: string, offlineClient: OfflineClient) => Promise<{ error: string | null }>;
   removeOfflineClientFromSession: (sessionId: string, offlineClientId: string) => Promise<{ error: string | null }>;
-  /** Create weekly recurring sessions for 2 months from the start date */
-  createRecurringSessions: (data: CreateSessionData) => Promise<{ count: number; error: string | null }>;
+  /** Create weekly recurring sessions for the given number of weeks (max 8) */
+  createRecurringSessions: (data: CreateSessionData, weeks: number) => Promise<{ count: number; error: string | null }>;
   clearCurrentSession: () => void;
 }
 
@@ -460,17 +460,16 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   clearCurrentSession: () => set({ currentSession: null }),
 
-  // ─── Coach: create weekly recurring sessions for 2 months ────────────────
-  createRecurringSessions: async ({ client_ids, offline_client_ids, ...sessionData }) => {
+  // ─── Coach: create weekly recurring sessions ────────────────────────────
+  createRecurringSessions: async ({ client_ids, offline_client_ids, ...sessionData }, weeks) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { count: 0, error: 'Not authenticated' };
 
-    // Build weekly dates from start date through 2 months later
+    const clampedWeeks = Math.min(Math.max(1, weeks), 8);
     const [yr, mo, dy] = sessionData.date.split('-').map(Number);
-    const endDate = new Date(yr, mo - 1 + 2, dy);
     const dates: string[] = [];
     const cursor = new Date(yr, mo - 1, dy);
-    while (cursor <= endDate) {
+    for (let i = 0; i < clampedWeeks; i++) {
       dates.push(`${cursor.getFullYear()}-${zeroPad(cursor.getMonth() + 1)}-${zeroPad(cursor.getDate())}`);
       cursor.setDate(cursor.getDate() + 7);
     }
