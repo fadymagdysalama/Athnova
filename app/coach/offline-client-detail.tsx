@@ -506,7 +506,7 @@ export default function OfflineClientDetailScreen() {
                 <Text style={styles.sectionLabel}>Session Packages</Text>
                 {!active && !isViewOnly && (
                   <TouchableOpacity style={styles.pkgHeaderAdd} onPress={() => setShowAddPkg(true)} activeOpacity={0.8}>
-                    <Text style={styles.pkgHeaderAddText}>+ New</Text>
+                    <Text style={styles.pkgHeaderAddText}>New</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -660,7 +660,7 @@ export default function OfflineClientDetailScreen() {
                   })}
                   {!packages.find(p => p.status === 'active') && !isViewOnly && (
                     <TouchableOpacity style={styles.pkgHeaderAdd} onPress={() => setShowAddPkg(true)} activeOpacity={0.8}>
-                      <Text style={styles.pkgHeaderAddText}>+ Start New Package</Text>
+                      <Text style={styles.pkgHeaderAddText}>Start New Package</Text>
                     </TouchableOpacity>
                   )}
                 </>
@@ -763,7 +763,7 @@ export default function OfflineClientDetailScreen() {
                 onPress={() => { fetchMyPrograms(); setShowProgPicker(true); }}
                 activeOpacity={0.8}
               >
-                <Text style={styles.addProgRowBtnText}>+ Add Program</Text>
+                <Text style={styles.addProgRowBtnText}>Add Program</Text>
               </TouchableOpacity>
             )}
             </>

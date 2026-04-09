@@ -97,7 +97,7 @@ function MeasurementsSection() {
         style={styles.addButton}
         onPress={() => router.push('/progress/log-measurement')}
       >
-        <Text style={styles.addButtonText}>+ {t('progress.logMeasurement')}</Text>
+        <Text style={styles.addButtonText}>{t('progress.logMeasurement')}</Text>
       </TouchableOpacity>
 
       {latest && (
@@ -232,7 +232,7 @@ function StrengthSection() {
         style={styles.addButton}
         onPress={() => router.push('/progress/log-strength')}
       >
-        <Text style={styles.addButtonText}>+ {t('progress.logStrength')}</Text>
+        <Text style={styles.addButtonText}>{t('progress.logStrength')}</Text>
       </TouchableOpacity>
 
       {prs.length > 0 && (
@@ -370,7 +370,7 @@ function PhotosSection() {
         style={styles.addButton}
         onPress={() => router.push('/progress/photos')}
       >
-        <Text style={styles.addButtonText}>+ {t('progress.addPhoto')}</Text>
+        <Text style={styles.addButtonText}>{t('progress.addPhoto')}</Text>
       </TouchableOpacity>
 
       {isLoading && photos.length === 0 ? (

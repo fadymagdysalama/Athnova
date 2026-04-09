@@ -25,6 +25,11 @@ import { AppAlert, useAppAlert } from '../../src/components/AppAlert';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 import type { OfflineClient, Program } from '../../src/types';
 
+function formatJoinedDate(iso: string): string {
+  const d = new Date(iso);
+  return 'Joined ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 function Avatar({ name, size = 44 }: { name: string; size?: number }) {
   const initial = name?.charAt(0)?.toUpperCase() ?? '?';
   return (
@@ -370,6 +375,7 @@ function CoachView() {
                         <View style={styles.cardInfo}>
                           <Text style={styles.cardName}>{p.display_name}</Text>
                           <Text style={styles.cardUsername}>@{p.username}</Text>
+                          <Text style={styles.cardJoinedDate}>{formatJoinedDate(request.created_at)}</Text>
                         </View>
                         <View style={styles.onlineBadgePill}>
                           <Text style={styles.onlineBadgeText}>Online</Text>
@@ -480,6 +486,7 @@ function CoachView() {
                       <View style={styles.cardInfo}>
                         <Text style={styles.cardName}>{p.display_name}</Text>
                         <Text style={styles.cardUsername}>@{p.username}</Text>
+                        <Text style={styles.cardJoinedDate}>{formatJoinedDate(request.created_at)}</Text>
                       </View>
                       <View style={styles.offlineBadgePill}>
                         <Text style={styles.offlineBadgeText}>On Ground</Text>
@@ -562,6 +569,7 @@ function CoachView() {
                         <View style={styles.cardInfo}>
                           <Text style={styles.cardName}>{oc.display_name}</Text>
                           {!!oc.phone && <Text style={styles.cardUsername}>{oc.phone}</Text>}
+                          <Text style={styles.cardJoinedDate}>{formatJoinedDate(oc.created_at)}</Text>
                         </View>
                         <View style={styles.walkupBadgePill}>
                           <Text style={styles.walkupBadgeText}>No App</Text>
@@ -1216,6 +1224,7 @@ const styles = StyleSheet.create({
   cardInfo: { flex: 1, gap: 2 },
   cardName: { fontSize: fontSize.md, fontWeight: '700', color: colors.text },
   cardUsername: { fontSize: fontSize.sm, color: colors.textMuted, fontWeight: '400' },
+  cardJoinedDate: { fontSize: 10, color: colors.textMuted, fontWeight: '400', marginTop: 1, opacity: 0.7 },
   avatar: { backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: colors.textInverse, fontWeight: '800' },
   actionBtn: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs + 1, borderRadius: borderRadius.md },

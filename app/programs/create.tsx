@@ -422,7 +422,7 @@ function Step2({
                   style={[styles.addExBtn, { flex: 1 }]}
                   onPress={() => addExercise(day.key)}
                 >
-                  <Text style={styles.addExBtnText}>+ {t('programs.addExercise')}</Text>
+                  <Text style={styles.addExBtnText}>{t('programs.addExercise')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.libraryBtn}

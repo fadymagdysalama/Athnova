@@ -114,12 +114,16 @@ export default function HomeScreen() {
       const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
       if (isCoach) {
-        const [clientsRes, programsRes, sessionsRes] = await Promise.all([
+        const [clientsRes, offlineClientsRes, programsRes, sessionsRes] = await Promise.all([
           supabase
             .from('coach_client_requests')
             .select('id', { count: 'exact', head: true })
             .eq('coach_id', profile.id)
             .eq('status', 'accepted'),
+          supabase
+            .from('offline_clients')
+            .select('id', { count: 'exact', head: true })
+            .eq('coach_id', profile.id),
           supabase
             .from('programs')
             .select('id', { count: 'exact', head: true })
@@ -138,7 +142,7 @@ export default function HomeScreen() {
         if (!isMounted) return;
 
         setStats({
-          primaryCount: clientsRes.count ?? 0,
+          primaryCount: (clientsRes.count ?? 0) + (offlineClientsRes.count ?? 0),
           secondaryCount: programsRes.count ?? 0,
           primaryLabel: t('home.activeClients'),
           secondaryLabel: t('home.activePrograms'),
@@ -348,7 +352,7 @@ export default function HomeScreen() {
             value={String(stats?.secondaryCount ?? 0)}
             onPress={() => {
               if (isCoach) router.push('/(tabs)/programs');
-              else if (isOnGroundClient) router.push({ pathname: '/coach/offline-client-detail', params: { viewOnly: 'true' } });
+              else if (isOnGroundClient) router.push('/(tabs)/schedule');
               else router.push('/(tabs)/progress');
             }}
           />
@@ -367,7 +371,11 @@ export default function HomeScreen() {
                 <TouchableOpacity
                   key={session.id}
                   style={styles.sessionCard}
-                  onPress={() => router.push({ pathname: '/sessions/detail', params: { sessionId: session.id } })}
+                  onPress={() =>
+                    isOnGroundClient
+                      ? router.push('/(tabs)/schedule')
+                      : router.push({ pathname: '/sessions/detail', params: { sessionId: session.id } })
+                  }
                   activeOpacity={0.8}
                 >
                   <View style={styles.sessionCardHeader}>

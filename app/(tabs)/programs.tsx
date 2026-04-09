@@ -872,7 +872,7 @@ export default function ProgramsScreen() {
             style={styles.createBtn}
             onPress={() => router.push('/programs/create')}
           >
-            <Text style={styles.createBtnText}>+ {t('programs.createProgram')}</Text>
+            <Text style={styles.createBtnText}>{t('programs.createProgram')}</Text>
           </TouchableOpacity>
         )}
       </View>

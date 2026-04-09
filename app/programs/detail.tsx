@@ -460,7 +460,7 @@ export default function ProgramDetailScreen() {
                         style={styles.feedbackAddBtn}
                         onPress={() => handleEditFeedback(day.id)}
                       >
-                        <Text style={styles.feedbackAddText}>+ {t('programs.leaveFeedback')}</Text>
+                        <Text style={styles.feedbackAddText}>{t('programs.leaveFeedback')}</Text>
                       </TouchableOpacity>
                     )}
                   </View>

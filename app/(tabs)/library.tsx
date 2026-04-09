@@ -310,7 +310,7 @@ function CategorySection({
             onPress={onAddExercise}
             style={[styles.addCatBtn, { borderColor: meta.accent, backgroundColor: meta.bg }]}
           >
-            <Text style={[styles.addCatBtnText, { color: meta.accent }]}>+ {t('library.addExercise')}</Text>
+            <Text style={[styles.addCatBtnText, { color: meta.accent }]}>{t('library.addExercise')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -487,13 +487,13 @@ export default function LibraryScreen() {
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity style={styles.outlineBtn} onPress={() => setShowAddCategory(true)}>
-            <Text style={styles.outlineBtnText}>+ {t('library.addCategory')}</Text>
+            <Text style={styles.outlineBtnText}>{t('library.addCategory')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.primaryBtn}
             onPress={() => { setAddExerciseDefaultCat('push'); setShowAddExercise(true); }}
           >
-            <Text style={styles.primaryBtnText}>+ {t('library.addExercise')}</Text>
+            <Text style={styles.primaryBtnText}>{t('library.addExercise')}</Text>
           </TouchableOpacity>
         </View>
       </View>

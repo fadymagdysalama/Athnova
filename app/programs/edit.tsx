@@ -495,7 +495,7 @@ export default function EditProgramScreen() {
                     style={styles.addExBtn}
                     onPress={() => addLocal(day.id)}
                   >
-                    <Text style={styles.addExBtnText}>+ {t('programs.addExercise')}</Text>
+                    <Text style={styles.addExBtnText}>{t('programs.addExercise')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.libraryBtn}
