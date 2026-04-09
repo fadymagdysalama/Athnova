@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
@@ -93,6 +93,23 @@ export default function ProfileScreen() {
             />
           </View>
         )}
+
+        {/* Support */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>{t('feedback.supportSection')}</Text>
+
+          <TouchableOpacity
+            style={styles.menuRow}
+            onPress={() => router.push('/profile/feedback')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.menuRowLeft}>
+              <Text style={styles.menuRowEmoji}>💬</Text>
+              <Text style={styles.menuRowLabel}>{t('feedback.menuLabel')}</Text>
+            </View>
+            <Text style={styles.menuRowChevron}>›</Text>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Settings</Text>
@@ -254,5 +271,30 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     textAlign: 'center',
     marginTop: spacing['3xl'],
+  },
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.sm,
+  },
+  menuRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  menuRowEmoji: {
+    fontSize: 18,
+  },
+  menuRowLabel: {
+    fontSize: fontSize.md,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  menuRowChevron: {
+    fontSize: 22,
+    color: colors.textMuted,
+    fontWeight: '300',
+    lineHeight: 26,
   },
 });

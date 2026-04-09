@@ -196,6 +196,24 @@ CREATE TABLE client_feedback (
 );
 
 -- =====================================================
+-- APP HELP & FEEDBACK
+-- =====================================================
+CREATE TABLE app_feedback (
+  id           UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id      UUID        NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  category     TEXT        NOT NULL CHECK (category IN ('bug', 'feature', 'general', 'help')),
+  subject      TEXT        NOT NULL CHECK (char_length(subject) <= 120),
+  message      TEXT        NOT NULL CHECK (char_length(message) <= 2000),
+  status       TEXT        NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'seen', 'resolved')),
+  app_version  TEXT        NOT NULL DEFAULT '1.0.0',
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_app_feedback_user     ON app_feedback(user_id);
+CREATE INDEX idx_app_feedback_status   ON app_feedback(status);
+CREATE INDEX idx_app_feedback_category ON app_feedback(category);
+
+-- =====================================================
 -- NOTIFICATIONS
 -- =====================================================
 CREATE TABLE notifications (
@@ -443,6 +461,13 @@ CREATE POLICY "Users manage own workout logs" ON workout_logs
 -- CLIENT FEEDBACK: Client and their coach
 CREATE POLICY "Feedback visible to client" ON client_feedback
   FOR ALL USING (auth.uid() = client_id);
+
+ALTER TABLE app_feedback ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can insert own feedback" ON app_feedback
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can view own feedback" ON app_feedback
+  FOR SELECT USING (auth.uid() = user_id);
 
 -- NOTIFICATIONS: Own notifications only
 CREATE POLICY "Users see own notifications" ON notifications
