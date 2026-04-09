@@ -85,7 +85,7 @@ function formatSessionDate(date: string): string {
 export default function HomeScreen() {
   const { t } = useTranslation();
   const { profile } = useAuthStore();
-  const { myClientMode } = useConnectionStore();
+  const { myClientMode, clientDataLoaded } = useConnectionStore();
   const { unreadCount, fetchNotifications } = useNotificationStore();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [upcomingSessions, setUpcomingSessions] = useState<UpcomingSessionItem[]>([]);
@@ -100,10 +100,16 @@ export default function HomeScreen() {
   if (!profile) return null;
 
   const isCoach = profile.role === 'coach';
-  const isOnGroundClient = !isCoach && myClientMode === 'offline';
+  // For clients, wait until connection data is fully loaded before determining mode
+  // to avoid briefly showing the wrong dashboard type.
+  const isOnGroundClient = !isCoach && clientDataLoaded && myClientMode === 'offline';
 
   useFocusEffect(
     useCallback(() => {
+      // For client users, wait until their connection mode is resolved before
+      // loading the dashboard so we never briefly render the wrong layout.
+      if (!isCoach && !clientDataLoaded) return;
+
       fetchNotifications();
 
       let isMounted = true;
@@ -296,7 +302,7 @@ export default function HomeScreen() {
       return () => {
         isMounted = false;
       };
-    }, [isCoach, isOnGroundClient, profile.id, t, fetchNotifications])
+    }, [isCoach, isOnGroundClient, clientDataLoaded, profile.id, t, fetchNotifications])
   );
 
   return (

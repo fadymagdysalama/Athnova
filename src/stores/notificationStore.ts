@@ -22,7 +22,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   isLoading: false,
 
   fetchNotifications: async () => {
-    set({ isLoading: true });
+    if (!get().notifications.length) set({ isLoading: true });
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {

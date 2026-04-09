@@ -17,7 +17,7 @@ export const useOfflineClientStore = create<OfflineClientState>((set, get) => ({
   isLoading: false,
 
   fetchOfflineClients: async () => {
-    set({ isLoading: true });
+    if (!get().offlineClients.length) set({ isLoading: true });
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return set({ isLoading: false });
 

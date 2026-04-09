@@ -54,7 +54,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   uploading: false,
 
   fetchMyDocuments: async () => {
-    set({ isLoading: true });
+    if (!get().documents.length) set({ isLoading: true });
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return set({ isLoading: false });
 

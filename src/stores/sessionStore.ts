@@ -73,7 +73,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   // ─── Fetch sessions for a given month ────────────────────────────────────
   fetchSessions: async (year, month, role) => {
-    set({ isLoading: true });
+    if (!get().sessions.length) set({ isLoading: true });
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return set({ isLoading: false });
 

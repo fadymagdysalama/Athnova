@@ -49,7 +49,7 @@ export const useProgressStore = create<ProgressState>((set, get) => ({
   // ─── Measurements ────────────────────────────────────────────────────────────
 
   fetchMeasurements: async (clientId) => {
-    set({ isLoading: true });
+    if (!get().measurements.length) set({ isLoading: true });
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return set({ isLoading: false });
 
@@ -89,7 +89,7 @@ export const useProgressStore = create<ProgressState>((set, get) => ({
   // ─── Strength Logs ───────────────────────────────────────────────────────────
 
   fetchStrengthLogs: async (clientId) => {
-    set({ isLoading: true });
+    if (!get().strengthLogs.length) set({ isLoading: true });
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return set({ isLoading: false });
 
@@ -159,7 +159,7 @@ export const useProgressStore = create<ProgressState>((set, get) => ({
   // ─── Progress Photos ─────────────────────────────────────────────────────────
 
   fetchPhotos: async (clientId) => {
-    set({ isLoading: true });
+    if (!get().photos.length) set({ isLoading: true });
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return set({ isLoading: false });
 

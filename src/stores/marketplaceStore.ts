@@ -51,7 +51,7 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
 
   // ─── Browse public programs ───────────────────────────────────────────────
   fetchPublicPrograms: async () => {
-    set({ isLoading: true });
+    if (!get().publicPrograms.length) set({ isLoading: true });
 
     const { data, error } = await supabase
       .from('programs')

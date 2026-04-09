@@ -83,7 +83,7 @@ export default function ProfileScreen() {
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Coach Subscription</Text>
             <Text style={styles.sectionSubtitle}>
-              Current plan: {(coachSubscription?.tier ?? 'starter').toUpperCase()}
+              Current plan: {coachSubscription == null ? '—' : coachSubscription.tier.toUpperCase()}
             </Text>
             <Button
               title="Manage Subscription"

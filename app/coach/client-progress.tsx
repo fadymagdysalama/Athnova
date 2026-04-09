@@ -81,6 +81,7 @@ export default function ClientProgressScreen() {
   const [fullscreenPhoto, setFullscreenPhoto] = useState<{ url: string; label: string; date: string } | null>(null);
   const [programsProgress, setProgramsProgress] = useState<ProgramProgressItem[]>([]);
   const [programsLoading, setProgramsLoading] = useState(false);
+  const [isDataReady, setIsDataReady] = useState(false);
 
   // Program picker state
   const [showProgramPicker, setShowProgramPicker] = useState(false);
@@ -139,10 +140,17 @@ export default function ClientProgressScreen() {
 
   useEffect(() => {
     if (!clientId) return;
-    fetchMeasurements(clientId);
-    fetchStrengthLogs(clientId);
-    fetchPhotos(clientId);
-    loadProgramsProgress();
+    setIsDataReady(false);
+    const load = async () => {
+      await Promise.all([
+        fetchMeasurements(clientId),
+        fetchStrengthLogs(clientId),
+        fetchPhotos(clientId),
+        loadProgramsProgress(),
+      ]);
+      setIsDataReady(true);
+    };
+    load();
   }, [clientId]);
 
   useFocusEffect(useCallback(() => {
@@ -361,8 +369,11 @@ export default function ClientProgressScreen() {
       </ScrollView>
 
       <ScrollView contentContainerStyle={styles.content} style={styles.contentScroll}>
+        {!isDataReady ? (
+          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: spacing['3xl'] ?? 48 }} />
+        ) : null}
         {/* ─── Measurements ─────────────────────────────────────────────── */}
-        {section === 'measurements' && (
+        {isDataReady && section === 'measurements' && (
           <View>
             {isLoading && measurements.length === 0 ? (
               <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xl }} />
@@ -432,7 +443,7 @@ export default function ClientProgressScreen() {
         )}
 
         {/* ─── Strength ─────────────────────────────────────────────────── */}
-        {section === 'strength' && (
+        {isDataReady && section === 'strength' && (
           <View>
             {isLoading && strengthLogs.length === 0 ? (
               <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xl }} />
@@ -524,7 +535,7 @@ export default function ClientProgressScreen() {
         )}
 
         {/* ─── Documents ─────────────────────────────────────────────────────────────────── */}
-        {section === 'documents' && (
+        {isDataReady && section === 'documents' && (
           <View>
             {clientDocuments.length === 0 ? (
               <View style={styles.emptyState}>
@@ -565,7 +576,7 @@ export default function ClientProgressScreen() {
         )}
 
         {/* ─── Photos ───────────────────────────────────────────────────── */}
-        {section === 'photos' && (
+        {isDataReady && section === 'photos' && (
           <View>
             {isLoading && photos.length === 0 ? (
               <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xl }} />
@@ -600,7 +611,7 @@ export default function ClientProgressScreen() {
         )}
 
         {/* ─── Programs ─────────────────────────────────────────────────── */}
-        {section === 'programs' && (
+        {isDataReady && section === 'programs' && (
           <View>
             <TouchableOpacity style={styles.assignProgramBtn} onPress={openProgramPicker}>
               <Text style={styles.assignProgramBtnText}>Assign / Change Program</Text>

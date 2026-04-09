@@ -17,6 +17,8 @@ interface ConnectionState {
   myRequest: CoachClientRequest | null;
   /** The mode the coach assigned this client: 'online' (full) | 'offline' (schedule only) */
   myClientMode: 'online' | 'offline' | null;
+  /** True once fetchClientData has completed at least once — prevents rendering with stale null mode */
+  clientDataLoaded: boolean;
 
   isLoading: boolean;
 
@@ -39,10 +41,12 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
   myCoach: null,
   myRequest: null,
   myClientMode: null,
+  clientDataLoaded: false,
   isLoading: false,
 
   fetchCoachData: async (silent = false) => {
-    if (!silent) set({ isLoading: true });
+    const hasData = get().clients.length > 0 || get().pendingRequests.length > 0;
+    if (!silent && !hasData) set({ isLoading: true });
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return set({ isLoading: false });
 
@@ -187,10 +191,11 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
         myRequest: request,
         myCoach: request.status === 'accepted' ? request.coach : null,
         myClientMode: request.status === 'accepted' ? (request.client_mode ?? 'online') : null,
+        clientDataLoaded: true,
         isLoading: false,
       });
     } else {
-      set({ myRequest: null, myCoach: null, myClientMode: null, isLoading: false });
+      set({ myRequest: null, myCoach: null, myClientMode: null, clientDataLoaded: true, isLoading: false });
     }
   },
 

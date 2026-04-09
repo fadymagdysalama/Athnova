@@ -85,7 +85,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
 
   // ─── Coach: fetch all programs they created ───────────────────────────────
   fetchMyPrograms: async () => {
-    set({ isLoading: true });
+    if (!get().myPrograms.length) set({ isLoading: true });
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return set({ isLoading: false });
 
@@ -340,75 +340,18 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
 
   // ─── Coach: duplicate a program (new id, copied days + exercises) ─────────
   duplicateProgram: async (id) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { id: null, error: 'Not authenticated' };
+    // Single RPC call – all copying happens server-side in one transaction,
+    // eliminating the 6+ sequential round-trips that caused the 7-second delay.
+    const { data: newId, error } = await supabase.rpc('duplicate_program', { original_id: id });
+    if (error || !newId) return { id: null, error: error?.message ?? 'Failed to duplicate' };
 
-    // Fetch original
-    const { data: orig, error: origErr } = await supabase
-      .from('programs')
-      .select('*')
-      .eq('id', id)
-      .single();
-    if (origErr || !orig) return { id: null, error: origErr?.message ?? 'Not found' };
-
-    // Create new program
-    const { data: newProg, error: progErr } = await supabase
-      .from('programs')
-      .insert({
-        creator_id: user.id,
-        title: `${orig.title} (Copy)`,
-        description: orig.description,
-        difficulty: orig.difficulty,
-        duration_days: orig.duration_days,
-        type: orig.type,
-        price: orig.price,
-        is_published: false,
-        is_coach_only: orig.is_coach_only ?? false,
-        tags: orig.tags ?? [],
-      })
-      .select()
-      .single();
-    if (progErr || !newProg) return { id: null, error: progErr?.message ?? 'Failed to create' };
-
-    // Fetch original days
-    const { data: origDays } = await supabase
-      .from('program_days')
-      .select('*')
-      .eq('program_id', id)
-      .order('day_number', { ascending: true });
-
-    for (const day of origDays ?? []) {
-      const { data: newDay } = await supabase
-        .from('program_days')
-        .insert({ program_id: newProg.id, day_number: day.day_number })
-        .select()
-        .single();
-      if (!newDay) continue;
-
-      // Fetch exercises for this day
-      const { data: exs } = await supabase
-        .from('program_exercises')
-        .select('*')
-        .eq('day_id', day.id)
-        .order('order_index', { ascending: true });
-
-      for (const ex of exs ?? []) {
-        await supabase.from('program_exercises').insert({
-          day_id: newDay.id,
-          exercise_name: ex.exercise_name,
-          video_url: ex.video_url,
-          sets: ex.sets,
-          reps: ex.reps,
-          rest_time: ex.rest_time,
-          notes: ex.notes,
-          order_index: ex.order_index,
-          superset_group: ex.superset_group ?? null,
-        });
-      }
+    // Fetch the newly created program so the list stays up-to-date
+    const { data: newProg } = await supabase.from('programs').select('*').eq('id', newId).single();
+    if (newProg) {
+      set((s) => ({ myPrograms: [newProg as Program, ...s.myPrograms.filter((p) => p.id !== newProg.id)] }));
     }
 
-    set((s) => ({ myPrograms: [newProg, ...s.myPrograms.filter((p) => p.id !== newProg.id)] }));
-    return { id: newProg.id, error: null };
+    return { id: newId as string, error: null };
   },
 
   // ─── Coach: reorder a day up or down within a program ────────────────────
@@ -471,7 +414,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
 
   // ─── Client: fetch assigned programs with full details ───────────────────
   fetchAssignedPrograms: async () => {
-    set({ isLoading: true });
+    if (!get().assignments.length) set({ isLoading: true });
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return set({ isLoading: false });
 

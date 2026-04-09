@@ -65,13 +65,19 @@ function LibraryCard({
   assignedCount,
   onPress,
   onAssign,
-  onMore,
+  onEdit,
+  onDuplicate,
+  onDelete,
+  duplicating,
 }: {
   program: Program;
   assignedCount: number;
   onPress: () => void;
   onAssign: () => void;
-  onMore: () => void;
+  onEdit: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  duplicating: boolean;
 }) {
   return (
     <TouchableOpacity style={styles.libCard} onPress={onPress} activeOpacity={0.85}>
@@ -110,10 +116,18 @@ function LibraryCard({
         {/* Actions */}
         <View style={styles.libCardFooter}>
           <TouchableOpacity style={styles.assignPrimary} onPress={onAssign} activeOpacity={0.85}>
-            <Text style={styles.assignPrimaryText}>Assign to Client  →</Text>
+            <Text style={styles.assignPrimaryText}>Assign  →</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.moreBtn} onPress={onMore} activeOpacity={0.7}>
-            <Text style={styles.moreBtnText}>···</Text>
+          <TouchableOpacity style={styles.cardIconBtn} onPress={onEdit} activeOpacity={0.75}>
+            <Text style={styles.cardIconBtnText}>Edit</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.cardIconBtn} onPress={onDuplicate} disabled={duplicating} activeOpacity={0.75}>
+            {duplicating
+              ? <ActivityIndicator size="small" color={colors.accent} />
+              : <Text style={styles.cardIconBtnText}>Copy</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.cardIconBtn, styles.cardIconBtnDanger]} onPress={onDelete} activeOpacity={0.75}>
+            <Text style={[styles.cardIconBtnText, { color: colors.error }]}>✕</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -139,7 +153,6 @@ function CoachView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [duplicating, setDuplicating] = useState<string | null>(null);
-  const [menuTarget, setMenuTarget] = useState<Program | null>(null);
 
   // Docs upload state
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -170,7 +183,6 @@ function CoachView() {
   };
 
   const handleDelete = (p: Program) => {
-    setMenuTarget(null);
     showAlert({
       title: t('programs.deleteProgram'),
       message: p.title,
@@ -189,7 +201,6 @@ function CoachView() {
   };
 
   const handleDuplicate = async (p: Program) => {
-    setMenuTarget(null);
     setDuplicating(p.id);
     const { id: newId, error } = await duplicateProgram(p.id);
     setDuplicating(null);
@@ -315,7 +326,10 @@ function CoachView() {
                     assignedCount={assignedCount}
                     onPress={() => router.push({ pathname: '/programs/detail', params: { id: p.id } })}
                     onAssign={() => router.push({ pathname: '/programs/assign', params: { id: p.id } })}
-                    onMore={() => setMenuTarget(p)}
+                    onEdit={() => router.push({ pathname: '/programs/edit', params: { id: p.id } })}
+                    onDuplicate={() => handleDuplicate(p)}
+                    onDelete={() => handleDelete(p)}
+                    duplicating={duplicating === p.id}
                   />
                 );
               })
@@ -413,83 +427,6 @@ function CoachView() {
           </>
         )}
       </ScrollView>
-
-      {/* ── Program ··· context menu ── */}
-      <Modal
-        visible={menuTarget !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setMenuTarget(null)}
-      >
-        <Pressable style={styles.menuOverlay} onPress={() => setMenuTarget(null)}>
-          <View
-            style={styles.menuSheet}
-            onStartShouldSetResponder={() => true}
-            onTouchEnd={(e) => e.stopPropagation()}
-          >
-            <View style={styles.menuHandle} />
-            <Text style={styles.menuTitle} numberOfLines={1}>{menuTarget?.title}</Text>
-
-            <TouchableOpacity
-              style={styles.menuOption}
-              onPress={() => {
-                const p = menuTarget;
-                setMenuTarget(null);
-                if (p) router.push({ pathname: '/programs/edit', params: { id: p.id } });
-              }}
-              activeOpacity={0.75}
-            >
-              <View style={[styles.menuOptionIcon, { backgroundColor: colors.accentFaded }]}>
-                {/* Pencil icon: body + tip */}
-                <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                  <View style={{ width: 5, height: 11, backgroundColor: colors.accent, borderTopLeftRadius: 2, borderTopRightRadius: 2 }} />
-                  <View style={{ width: 0, height: 0, borderLeftWidth: 2.5, borderRightWidth: 2.5, borderTopWidth: 4, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: colors.accent }} />
-                </View>
-              </View>
-              <Text style={styles.menuOptionText}>Edit Program</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.menuOption}
-              onPress={() => menuTarget && handleDuplicate(menuTarget)}
-              disabled={duplicating === menuTarget?.id}
-              activeOpacity={0.75}
-            >
-              <View style={[styles.menuOptionIcon, { backgroundColor: colors.accentFaded }]}>
-                {duplicating === menuTarget?.id
-                  ? <ActivityIndicator size="small" color={colors.accent} />
-                  : (
-                    /* Duplicate icon: two overlapping squares */
-                    <View style={{ width: 18, height: 18 }}>
-                      <View style={{ position: 'absolute', top: 0, right: 0, width: 12, height: 12, borderWidth: 2, borderColor: colors.accent, borderRadius: 2, backgroundColor: colors.accentFaded }} />
-                      <View style={{ position: 'absolute', bottom: 0, left: 0, width: 12, height: 12, borderWidth: 2, borderColor: colors.accent, borderRadius: 2, backgroundColor: colors.surface }} />
-                    </View>
-                  )}
-              </View>
-              <Text style={styles.menuOptionText}>Duplicate</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.menuOption}
-              onPress={() => menuTarget && handleDelete(menuTarget)}
-              activeOpacity={0.75}
-            >
-              <View style={[styles.menuOptionIcon, { backgroundColor: colors.errorFaded }]}>
-                {/* Trash icon: lid + body */}
-                <View style={{ alignItems: 'center', gap: 2 }}>
-                  <View style={{ width: 14, height: 2, backgroundColor: colors.error, borderRadius: 1 }} />
-                  <View style={{ width: 10, height: 12, borderWidth: 2, borderColor: colors.error, borderRadius: 2, borderTopWidth: 0 }} />
-                </View>
-              </View>
-              <Text style={[styles.menuOptionText, { color: colors.error }]}>Delete Program</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.menuCancel} onPress={() => setMenuTarget(null)}>
-              <Text style={styles.menuCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </Pressable>
-      </Modal>
 
       {/* ── Assign Document Modal ── */}
       <Modal
@@ -1044,6 +981,21 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   assignPrimaryText: { color: '#fff', fontSize: fontSize.sm, fontWeight: '700' },
+  cardIconBtn: {
+    paddingHorizontal: spacing.md,
+    height: 36,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  cardIconBtnDanger: {
+    borderColor: colors.errorFaded,
+    backgroundColor: colors.errorFaded,
+  },
+  cardIconBtnText: { fontSize: 15, color: colors.accent, lineHeight: 18 },
   moreBtn: {
     width: 36,
     height: 36,

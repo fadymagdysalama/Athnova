@@ -80,7 +80,7 @@ export default function EditProgramScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const {
     currentProgram, isLoading, fetchProgramWithDays,
-    updateProgram, updateExercise, addExercise, deleteExercise,
+    deleteExercise,
   } = useProgramStore();
 
   const [saving, setSaving] = useState(false);
@@ -223,16 +223,15 @@ export default function EditProgramScreen() {
     if (!title.trim()) { showAlert({ title: t('common.error'), message: t('programs.programNameRequired') }); return; }
     setSaving(true);
 
-    const { error: progErr } = await updateProgram(id!, { title: title.trim(), description: description.trim(), is_coach_only: isCoachOnly });
-    if (progErr) { setSaving(false); showAlert({ title: t('common.error'), message: progErr }); return; }
-
-    for (const day of days) {
-      // Persist reordered day_number
-      await supabase.from('program_days').update({ day_number: day.day_number }).eq('id', day.id);
-
-      for (let i = 0; i < day.exercises.length; i++) {
-        const ex = day.exercises[i];
-        const data = {
+    // Build payload for the single save_program RPC – collapses all
+    // sequential per-exercise awaits into one server-side round-trip.
+    const payload = days.map((day, _di) => ({
+      id: day.id,
+      day_number: day.day_number,
+      exercises: day.exercises
+        .filter((ex) => ex.exercise_name.trim())
+        .map((ex, i) => ({
+          id: ex.id ?? null,
           exercise_name: ex.exercise_name.trim(),
           sets: parseInt(ex.sets, 10) || 1,
           reps: ex.reps.trim() || '10',
@@ -242,27 +241,19 @@ export default function EditProgramScreen() {
           order_index: i,
           superset_group: ex.superset_group ?? null,
           weight: ex.weight.trim() || null,
-        };
-        if (!data.exercise_name) continue;
-        if (ex.id) {
-          await updateExercise(ex.id, data);
-        } else {
-          const { id: newId } = await addExercise(day.id, data);
-          if (newId) {
-            setDays((prev) =>
-              prev.map((d) =>
-                d.id !== day.id ? d : {
-                  ...d,
-                  exercises: d.exercises.map((e) => e.key === ex.key ? { ...e, id: newId } : e),
-                }
-              )
-            );
-          }
-        }
-      }
-    }
+        })),
+    }));
+
+    const { error } = await supabase.rpc('save_program', {
+      p_program_id: id,
+      p_title: title.trim(),
+      p_description: description.trim(),
+      p_is_coach_only: isCoachOnly,
+      p_days: payload,
+    });
 
     setSaving(false);
+    if (error) { showAlert({ title: t('common.error'), message: error.message }); return; }
     router.back();
   };
 

@@ -35,7 +35,7 @@ export const useExerciseLibraryStore = create<ExerciseLibraryState>((set, get) =
   isLoading: false,
 
   fetch: async () => {
-    set({ isLoading: true });
+    if (!get().exercises.length) set({ isLoading: true });
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return set({ isLoading: false });
 
