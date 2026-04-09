@@ -12,6 +12,8 @@ import {
 } from 'react-native';
 import { ExerciseLibraryDrawer } from '../../src/components/ExerciseLibraryDrawer';
 import { AppAlert, useAppAlert } from '../../src/components/AppAlert';
+import { invokeEdgeFunction } from '../../src/lib/invokeEdgeFunction';
+import { useExerciseLibraryStore } from '../../src/stores/exerciseLibraryStore';
 import type { ExerciseTemplate } from '../../src/types';
 
 const SS_COLOR = '#EA580C'; // superset accent – vibrant orange
@@ -153,6 +155,7 @@ interface ExerciseDraft {
   video_url: string;
   superset_group: number | null;
   weight: string;
+  isAiGenerated?: boolean;
 }
 
 // ─── Superset connector shown between two adjacent exercise rows ──────────────
@@ -188,16 +191,18 @@ function ExerciseRow({
   onChange,
   onRemove,
   supersetLabel,
+  onAddToLibrary,
 }: {
   ex: ExerciseDraft;
   onChange: (field: keyof ExerciseDraft, value: string) => void;
   onRemove: () => void;
   supersetLabel?: string;
+  onAddToLibrary?: () => void;
 }) {
   const { t } = useTranslation();
   const inSuperset = ex.superset_group !== null;
   return (
-    <View style={[styles.exerciseRow, inSuperset && styles.exerciseRowSuperset]}>
+    <View style={[styles.exerciseRow, inSuperset && styles.exerciseRowSuperset, ex.isAiGenerated && styles.exerciseRowAi]}>
       {inSuperset && <View style={styles.ssSidebar} />}
       <View style={styles.exerciseRowInner}>
       <View style={styles.exerciseRowHeader}>
@@ -208,6 +213,11 @@ function ExerciseRow({
           value={ex.exercise_name}
           onChangeText={(v) => onChange('exercise_name', v)}
         />
+        {ex.isAiGenerated && !inSuperset && (
+          <View style={styles.aiBadge}>
+            <Text style={styles.aiBadgeText}>✦ AI</Text>
+          </View>
+        )}
         {inSuperset && (
           <View style={styles.ssBadge}>
             <Text style={styles.ssBadgeText}>⚡ {supersetLabel}</Text>
@@ -277,6 +287,16 @@ function ExerciseRow({
         value={ex.notes}
         onChangeText={(v) => onChange('notes', v)}
       />
+      {onAddToLibrary && (
+        <TouchableOpacity
+          style={[styles.addToLibraryBtn, !ex.exercise_name.trim() && styles.addToLibraryBtnDisabled]}
+          onPress={onAddToLibrary}
+          disabled={!ex.exercise_name.trim()}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.addToLibraryBtnText}>📥 {t('library.saveToLibrary')}</Text>
+        </TouchableOpacity>
+      )}
       </View>
     </View>
   );
@@ -295,16 +315,76 @@ function Step2({
   setDays,
   onSave,
   saving,
+  showAlert,
 }: {
   durationDays: number;
   days: DayDraft[];
   setDays: (v: DayDraft[]) => void;
   onSave: () => void;
   saving: boolean;
+  showAlert: (opts: { title: string; message: string }) => void;
 }) {
   const { t } = useTranslation();
+  const { add: addToLibrary } = useExerciseLibraryStore();
   const [expandedDay, setExpandedDay] = useState<string | null>(days[0]?.key ?? null);
   const [libraryDayKey, setLibraryDayKey] = useState<string | null>(null);
+
+  const handleAddToLibrary = async (ex: ExerciseDraft) => {
+    if (!ex.exercise_name.trim()) return;
+    const { error } = await addToLibrary({
+      name: ex.exercise_name.trim(),
+      category: 'other',
+      video_url: ex.video_url.trim(),
+      default_notes: ex.notes.trim(),
+      default_sets: ex.sets.trim(),
+      default_reps: ex.reps.trim(),
+    });
+    if (error) {
+      showAlert({ title: t('common.error'), message: error });
+    } else {
+      showAlert({ title: t('library.saveToLibrary'), message: `"${ex.exercise_name.trim()}" has been added to your library.` });
+    }
+  };
+  const [aiInputDayKey, setAiInputDayKey] = useState<string | null>(null);
+  const [aiText, setAiText] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const handleAiFill = async (dayKey: string) => {
+    if (!aiText.trim()) return;
+    setAiLoading(true);
+    setAiError(null);
+    const { data, error } = await invokeEdgeFunction<{ exercises: Array<{
+      exercise_name: string;
+      sets: number;
+      reps: string;
+      rest_time: string;
+      weight: string;
+      notes: string;
+      superset_group: number | null;
+    }> }>('ai-parse-workout', { text: aiText.trim() });
+    setAiLoading(false);
+    if (error || !data?.exercises?.length) {
+      setAiError(error ?? 'No exercises parsed. Try describing the workout in more detail.');
+      return;
+    }
+    const now = Date.now();
+    const newExercises: ExerciseDraft[] = data.exercises.map((e, i) => ({
+      key: `ai-${now}-${i}`,
+      exercise_name: e.exercise_name,
+      sets: String(e.sets),
+      reps: e.reps,
+      rest_time: e.rest_time,
+      notes: e.notes,
+      video_url: '',
+      superset_group: e.superset_group,
+      weight: e.weight,
+      isAiGenerated: true,
+    }));
+    setDays(days.map((d) => d.key === dayKey ? { ...d, exercises: newExercises } : d));
+    setAiText('');
+    setAiInputDayKey(null);
+  };
 
   const addExercise = (dayKey: string, template?: ExerciseTemplate) => {
     const newEx: ExerciseDraft = {
@@ -400,6 +480,7 @@ function Step2({
                     }
                     onChange={(field, value) => updateExercise(day.key, ex.key, field, value)}
                     onRemove={() => removeExercise(day.key, ex.key)}
+                    onAddToLibrary={() => handleAddToLibrary(ex)}
                   />
                   {exIdx < day.exercises.length - 1 && (
                     <SupersetConnector
@@ -417,6 +498,43 @@ function Step2({
                   )}
                 </React.Fragment>
               ))}
+              {/* AI fill input panel */}
+              {aiInputDayKey === day.key && (
+                <View style={styles.aiPanel}>
+                  <Text style={styles.aiPanelTitle}>✦ Describe the workout</Text>
+                  <Text style={styles.aiPanelSubtitle}>Arabic, English, or both — AI will structure it for you</Text>
+                  <TextInput
+                    style={[styles.input, styles.aiTextarea]}
+                    placeholder={'e.g. bench press 4x10 wazn 20kg rayyah 30 sania, ba3diha superset dumbbell fly 30kg 4x10'}
+                    placeholderTextColor={colors.textMuted}
+                    value={aiText}
+                    onChangeText={(v) => { setAiText(v); setAiError(null); }}
+                    multiline
+                    numberOfLines={4}
+                    autoFocus
+                    textAlignVertical="top"
+                  />
+                  {aiError && <Text style={styles.aiError}>{aiError}</Text>}
+                  <View style={styles.aiActions}>
+                    <TouchableOpacity
+                      style={styles.aiCancelBtn}
+                      onPress={() => { setAiInputDayKey(null); setAiText(''); setAiError(null); }}
+                    >
+                      <Text style={styles.aiCancelBtnText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.aiGenerateBtn, (aiLoading || !aiText.trim()) && styles.btnDisabled]}
+                      onPress={() => handleAiFill(day.key)}
+                      disabled={aiLoading || !aiText.trim()}
+                    >
+                      {aiLoading
+                        ? <ActivityIndicator size="small" color="#fff" />
+                        : <Text style={styles.aiGenerateBtnText}>✦ Generate</Text>
+                      }
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
               <View style={styles.addExRow}>
                 <TouchableOpacity
                   style={[styles.addExBtn, { flex: 1 }]}
@@ -429,6 +547,18 @@ function Step2({
                   onPress={() => setLibraryDayKey(day.key)}
                 >
                   <Text style={styles.libraryBtnText}>🗂️ {t('library.fromLibrary')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.aiBtn, aiInputDayKey === day.key && styles.aiBtnActive]}
+                  onPress={() => {
+                    if (aiInputDayKey === day.key) {
+                      setAiInputDayKey(null); setAiText(''); setAiError(null);
+                    } else {
+                      setAiInputDayKey(day.key);
+                    }
+                  }}
+                >
+                  <Text style={[styles.aiBtnText, aiInputDayKey === day.key && styles.aiBtnTextActive]}>✦ AI</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -581,6 +711,7 @@ export default function CreateProgramScreen() {
           setDays={setDays}
           onSave={handleSave}
           saving={saving}
+          showAlert={showAlert}
         />
       )}
       <AppAlert {...alertProps} />
@@ -793,6 +924,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   removeExText: { fontSize: 13, color: colors.error, fontWeight: '700' },
+  addToLibraryBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: 4,
+    paddingHorizontal: spacing.sm,
+    borderRadius: borderRadius.sm,
+    backgroundColor: colors.accentFaded,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    marginTop: spacing.xs,
+  },
+  addToLibraryBtnText: { fontSize: fontSize.xs, fontWeight: '600', color: colors.accent },
+  addToLibraryBtnDisabled: { opacity: 0.3 },
 
   // ── Weight unit toggle ─────────────────────────────────────────────────────
   unitToggle: {
@@ -883,6 +1026,106 @@ const styles = StyleSheet.create({
   tagChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   tagChipText: { fontSize: fontSize.xs, fontWeight: '600', color: colors.textMuted },
   tagChipTextActive: { color: '#fff' },
+
+  // ── AI fill panel ────────────────────────────────────────────────────────────
+  aiBtn: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.full,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#7C3AED',
+  },
+  aiBtnActive: {
+    backgroundColor: '#7C3AED',
+  },
+  aiBtnText: {
+    fontSize: fontSize.sm,
+    fontWeight: '700',
+    color: '#7C3AED',
+  },
+  aiBtnTextActive: {
+    color: '#fff',
+  },
+  aiPanel: {
+    backgroundColor: '#F5F3FF',
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+    borderColor: '#7C3AED',
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  aiPanelTitle: {
+    fontSize: fontSize.sm,
+    fontWeight: '800',
+    color: '#5B21B6',
+  },
+  aiPanelSubtitle: {
+    fontSize: fontSize.xs,
+    color: '#7C3AED',
+    marginTop: -4,
+  },
+  aiTextarea: {
+    minHeight: 88,
+    textAlignVertical: 'top',
+    paddingTop: spacing.md,
+    borderColor: '#7C3AED',
+    backgroundColor: '#fff',
+  },
+  aiError: {
+    fontSize: fontSize.xs,
+    color: colors.error,
+    fontWeight: '600',
+  },
+  aiActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: 2,
+  },
+  aiCancelBtn: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#7C3AED',
+    backgroundColor: '#fff',
+  },
+  aiCancelBtnText: {
+    fontSize: fontSize.sm,
+    fontWeight: '700',
+    color: '#7C3AED',
+  },
+  aiGenerateBtn: {
+    flex: 2,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full,
+    alignItems: 'center',
+    backgroundColor: '#7C3AED',
+  },
+  aiGenerateBtnText: {
+    fontSize: fontSize.sm,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  // AI-generated exercise row highlight
+  exerciseRowAi: {
+    borderColor: '#7C3AED',
+    borderStyle: 'dashed',
+  },
+  aiBadge: {
+    backgroundColor: '#7C3AED',
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  aiBadgeText: {
+    fontSize: fontSize.xs,
+    fontWeight: '700',
+    color: '#fff',
+  },
 
   // ── Coach-only toggle ─────────────────────────────────────────────────────────
   coachOnlyRow: {

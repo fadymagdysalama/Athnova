@@ -54,6 +54,8 @@ interface SessionState {
   removeClientFromSession: (sessionId: string, clientId: string) => Promise<{ error: string | null }>;
   addOfflineClientToSession: (sessionId: string, offlineClientId: string, offlineClient: OfflineClient) => Promise<{ error: string | null }>;
   removeOfflineClientFromSession: (sessionId: string, offlineClientId: string) => Promise<{ error: string | null }>;
+  /** Create weekly recurring sessions for 2 months from the start date */
+  createRecurringSessions: (data: CreateSessionData) => Promise<{ count: number; error: string | null }>;
   clearCurrentSession: () => void;
 }
 
@@ -457,6 +459,60 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   clearCurrentSession: () => set({ currentSession: null }),
+
+  // ─── Coach: create weekly recurring sessions for 2 months ────────────────
+  createRecurringSessions: async ({ client_ids, offline_client_ids, ...sessionData }) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { count: 0, error: 'Not authenticated' };
+
+    // Build weekly dates from start date through 2 months later
+    const [yr, mo, dy] = sessionData.date.split('-').map(Number);
+    const endDate = new Date(yr, mo - 1 + 2, dy);
+    const dates: string[] = [];
+    const cursor = new Date(yr, mo - 1, dy);
+    while (cursor <= endDate) {
+      dates.push(`${cursor.getFullYear()}-${zeroPad(cursor.getMonth() + 1)}-${zeroPad(cursor.getDate())}`);
+      cursor.setDate(cursor.getDate() + 7);
+    }
+
+    let count = 0;
+    for (const date of dates) {
+      const { data: session, error } = await supabase
+        .from('sessions')
+        .insert({ ...sessionData, date, coach_id: user.id })
+        .select()
+        .single();
+
+      if (error) continue; // skip dates that overlap or fail
+
+      count++;
+
+      if (client_ids && client_ids.length > 0) {
+        await supabase
+          .from('session_clients')
+          .insert(client_ids.map((clientId) => ({ session_id: session.id, client_id: clientId })));
+
+        for (const clientId of client_ids) {
+          sendNotification({
+            recipient_id: clientId,
+            type: 'session_booked',
+            title: 'Recurring Session Booked',
+            body: `Your coach scheduled a recurring session on ${date} at ${sessionData.start_time}.`,
+            data: { session_id: session.id },
+          });
+        }
+      }
+
+      if (offline_client_ids && offline_client_ids.length > 0) {
+        await supabase
+          .from('session_offline_clients')
+          .insert(offline_client_ids.map((id) => ({ session_id: session.id, offline_client_id: id })));
+      }
+    }
+
+    if (count === 0) return { count: 0, error: 'All selected times overlap with existing sessions' };
+    return { count, error: null };
+  },
 
   // ─── Client: fetch coach's open future sessions ───────────────────────────
   fetchAvailableCoachSessions: async (coachId) => {

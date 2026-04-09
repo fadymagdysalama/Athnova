@@ -295,6 +295,10 @@ export default {
     cancellationClosedAt: 'Cancel at least {{hours}}h before start',
     bookingClosed: 'Booking window has closed for this session',
     hoursBeforeStart: 'hrs before start',
+    recurring: 'Recurring',
+    recurringLabel: 'Weekly · 2 months',
+    recurringHint: 'Repeats every week for 2 months (max)',
+    recurringCreated: '{{count}} recurring sessions created',
   },
   progress: {
     title: 'Progress',
@@ -356,6 +360,7 @@ export default {
     drawerSub: 'Tap to pre-fill an exercise',
     manage: 'Manage',
     fromLibrary: 'From Library',
+    saveToLibrary: 'Save to Library',
     search: 'Search exercises…',
     categoryAll: 'All',
     category_push: 'Push',

@@ -293,6 +293,10 @@ export default {
     cancellationClosedAt: 'ألغِ قبل {{hours}} ساعة على الأقل من البدء',
     bookingClosed: 'انتهت نافذة الحجز لهذه الجلسة',
     hoursBeforeStart: 'ساعات قبل البدء',
+    recurring: 'متكرر',
+    recurringLabel: 'أسبوعي · شهران',
+    recurringHint: 'يتكرر أسبوعيًا لمدة شهرين (الحد الأقصى)',
+    recurringCreated: 'تم إنشاء {{count}} جلسة متكررة',
   },
   progress: {
     title: 'التقدم',
@@ -354,6 +358,7 @@ export default {
     drawerSub: 'اضغط لتعبئة التمرين تلقائياً',
     manage: 'إدارة',
     fromLibrary: 'من المكتبة',
+    saveToLibrary: 'حفظ في المكتبة',
     search: 'ابحث عن تمرين…',
     categoryAll: 'الكل',
     category_push: 'دفع',

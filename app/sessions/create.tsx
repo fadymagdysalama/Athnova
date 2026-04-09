@@ -51,7 +51,7 @@ export default function CreateSessionScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const { initialDate } = useLocalSearchParams<{ initialDate?: string }>();
-  const { createSession } = useSessionStore();
+  const { createSession, createRecurringSessions } = useSessionStore();
   const { offlineClients, fetchOfflineClients } = useOfflineClientStore();
   const { clients } = useConnectionStore();
   const onGroundAppClients = clients.filter((c) => c.request?.client_mode === 'offline');
@@ -86,6 +86,7 @@ export default function CreateSessionScreen() {
   });
 
   const [saving, setSaving] = useState(false);
+  const [isRecurring, setIsRecurring] = useState(false);
 
   useEffect(() => {
     fetchOfflineClients();
@@ -155,6 +156,34 @@ export default function CreateSessionScreen() {
     }
 
     setSaving(true);
+
+    if (isRecurring) {
+      const { count, error } = await createRecurringSessions({
+        date,
+        start_time,
+        duration_minutes: durationNum,
+        notes: notes.trim() || null,
+        max_clients: maxClientsNum,
+        client_ids: selectedAppClientIds,
+        offline_client_ids: selectedOfflineClientIds,
+        booking_cutoff_hours: bookingCutoffHours,
+        cancellation_cutoff_hours: cancellationCutoffHours,
+      });
+      setSaving(false);
+
+      if (count === 0 && error) {
+        showAlert({ title: t('common.error'), message: error });
+        return;
+      }
+
+      showAlert({
+        title: t('common.done'),
+        message: t('schedule.recurringCreated', { count }),
+        buttons: [{ text: 'OK', onPress: () => router.replace('/(tabs)/schedule') }],
+      });
+      return;
+    }
+
     const { id, error } = await createSession({
       date,
       start_time,
@@ -261,6 +290,30 @@ export default function CreateSessionScreen() {
                 ))}
               </View>
             </View>
+          </View>
+
+          {/* ── Recurring ── */}
+          <View style={styles.fieldGroup}>
+            <View style={styles.recurringRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.fieldLabel}>{t('schedule.recurring')}</Text>
+                {isRecurring && (
+                  <Text style={styles.recurringHintText}>{t('schedule.recurringHint')}</Text>
+                )}
+              </View>
+              <TouchableOpacity
+                style={[styles.toggle, isRecurring && styles.toggleActive]}
+                onPress={() => setIsRecurring((v) => !v)}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.toggleThumb, isRecurring && styles.toggleThumbActive]} />
+              </TouchableOpacity>
+            </View>
+            {isRecurring && (
+              <View style={styles.recurringChip}>
+                <Text style={styles.recurringChipText}>↻  {t('schedule.recurringLabel')}</Text>
+              </View>
+            )}
           </View>
 
           {/* ── Duration ── */}
@@ -703,7 +756,55 @@ const styles = StyleSheet.create({
 
   fieldHint: { fontSize: fontSize.xs, color: colors.textMuted, marginTop: spacing.sm },
 
-  // ── Create button ─────────────────────────────────────────────────────────
+  // ── Recurring toggle ──────────────────────────────────────────────────────
+  recurringRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  recurringHintText: {
+    fontSize: fontSize.xs,
+    color: colors.textMuted,
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  toggle: {
+    width: 50,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.border,
+    padding: 3,
+    justifyContent: 'center',
+  },
+  toggleActive: { backgroundColor: colors.primary },
+  toggleThumb: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+    alignSelf: 'flex-start',
+  },
+  toggleThumbActive: { alignSelf: 'flex-end' },
+  recurringChip: {
+    marginTop: spacing.md,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.accentFaded,
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.accent,
+  },
+  recurringChipText: {
+    fontSize: fontSize.sm,
+    fontWeight: '700',
+    color: colors.accent,
+  },
   createBtn: {
     backgroundColor: colors.primary,
     borderRadius: borderRadius.full,

@@ -16,6 +16,7 @@ import { supabase } from '../../src/lib/supabase';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 import { ExerciseLibraryDrawer } from '../../src/components/ExerciseLibraryDrawer';
 import { AppAlert, useAppAlert } from '../../src/components/AppAlert';
+import { useExerciseLibraryStore } from '../../src/stores/exerciseLibraryStore';
 import type { ExerciseTemplate } from '../../src/types';
 
 interface ExerciseDraft {
@@ -91,6 +92,24 @@ export default function EditProgramScreen() {
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [libraryDayId, setLibraryDayId] = useState<string | null>(null);
   const { alertProps, showAlert } = useAppAlert();
+  const { add: addToLibrary } = useExerciseLibraryStore();
+
+  const handleAddToLibrary = async (ex: ExerciseDraft) => {
+    if (!ex.exercise_name.trim()) return;
+    const { error } = await addToLibrary({
+      name: ex.exercise_name.trim(),
+      category: 'other',
+      video_url: ex.video_url.trim(),
+      default_notes: ex.notes.trim(),
+      default_sets: ex.sets.trim(),
+      default_reps: ex.reps.trim(),
+    });
+    if (error) {
+      showAlert({ title: t('common.error'), message: error });
+    } else {
+      showAlert({ title: t('library.saveToLibrary'), message: `"${ex.exercise_name.trim()}" has been added to your library.` });
+    }
+  };
 
   useEffect(() => {
     if (id) fetchProgramWithDays(id);
@@ -463,6 +482,15 @@ export default function EditProgramScreen() {
                         value={ex.notes}
                         onChangeText={(v) => updateLocal(day.id, ex.key, 'notes', v)}
                       />
+                      {/* Save to Library */}
+                      <TouchableOpacity
+                        style={[editStyles.addToLibraryBtn, !ex.exercise_name.trim() && editStyles.addToLibraryBtnDisabled]}
+                        onPress={() => handleAddToLibrary(ex)}
+                        disabled={!ex.exercise_name.trim()}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={editStyles.addToLibraryBtnText}>📥 {t('library.saveToLibrary')}</Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
                   {exIdx < day.exercises.length - 1 && (
@@ -783,6 +811,19 @@ const editStyles = StyleSheet.create({
   ssPillLinked: { backgroundColor: `${SS_COLOR}18`, borderColor: SS_COLOR, borderStyle: 'solid' },
   ssPillText: { fontSize: 12, fontWeight: '500', color: colors.textMuted },
   ssPillTextLinked: { color: SS_COLOR, fontWeight: '700' },
+  // Save to library
+  addToLibraryBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: 4,
+    paddingHorizontal: spacing.sm,
+    borderRadius: borderRadius.sm,
+    backgroundColor: colors.accentFaded,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    marginTop: spacing.xs,
+  },
+  addToLibraryBtnText: { fontSize: fontSize.xs, fontWeight: '600', color: colors.accent },
+  addToLibraryBtnDisabled: { opacity: 0.3 },
   // Weight unit toggle
   unitToggle: {
     flexDirection: 'row',
