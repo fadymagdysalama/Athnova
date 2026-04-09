@@ -28,6 +28,9 @@ interface ConnectionState {
   rejectRequest: (requestId: string) => Promise<{ error: string | null }>;
   removeClient: (requestId: string) => Promise<{ error: string | null }>;
 
+  // Coach actions — mode switching
+  changeClientMode: (requestId: string, newMode: 'online' | 'offline') => Promise<{ error: string | null }>;
+
   // Client actions
   fetchClientData: (silent?: boolean) => Promise<void>;
   sendRequest: (coachUsername: string) => Promise<{ error: string | null }>;
@@ -77,23 +80,72 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: 'Not authenticated' };
 
-    const CLIENT_LIMITS: Record<string, number> = { starter: 5, pro: 15, business: Infinity };
+    // Only online-mode (full-access) clients count against this limit.
+    // On-ground app clients (client_mode='offline') are accepted freely.
+    if (mode === 'online') {
+      const ONLINE_LIMITS: Record<string, number> = { starter: 5, pro: Infinity };
 
-    const { data: subData } = await supabase
-      .from('coach_subscriptions')
-      .select('tier')
-      .eq('coach_id', user.id)
-      .maybeSingle();
+      const { data: subData } = await supabase
+        .from('coach_subscriptions')
+        .select('tier')
+        .eq('coach_id', user.id)
+        .maybeSingle();
 
-    const tier: string = subData?.tier ?? 'starter';
-    const limit = CLIENT_LIMITS[tier] ?? 1;
-    const currentClientCount = get().clients.length;
+      const tier: string = subData?.tier ?? 'starter';
+      const limit = ONLINE_LIMITS[tier] ?? 5;
 
-    if (currentClientCount >= limit) {
-      return {
-        error:
-          `You've reached your ${tier} plan limit of ${limit === Infinity ? 'unlimited' : limit} client${limit === 1 ? '' : 's'}. Upgrade your plan to accept more clients.`,
-      };
+      // Fetch all accepted clients and count online ones in JS to safely handle
+      // NULL client_mode rows (NULL = online by default).
+      const { data: acceptedRows } = await supabase
+        .from('coach_client_requests')
+        .select('client_mode')
+        .eq('coach_id', user.id)
+        .eq('status', 'accepted');
+
+      const onlineCount = (acceptedRows ?? []).filter(
+        (r: any) => (r.client_mode ?? 'online') === 'online'
+      ).length;
+
+      if (onlineCount >= limit) {
+        return {
+          error: `You've reached your ${tier} plan limit of ${limit} online client${limit === 1 ? '' : 's'}. Upgrade to Pro for unlimited clients.`,
+        };
+      }
+    }
+
+    if (mode === 'offline') {
+      const OFFLINE_LIMITS: Record<string, number> = { starter: 10, pro: Infinity };
+
+      const { data: subData } = await supabase
+        .from('coach_subscriptions')
+        .select('tier')
+        .eq('coach_id', user.id)
+        .maybeSingle();
+
+      const tier: string = subData?.tier ?? 'starter';
+      const limit = OFFLINE_LIMITS[tier] ?? 10;
+
+      // Total on-ground = pure walkup clients + app clients already in offline mode
+      const [{ count: walkupCount }, { data: appOfflineRows }] = await Promise.all([
+        supabase
+          .from('offline_clients')
+          .select('*', { count: 'exact', head: true })
+          .eq('coach_id', user.id)
+          .is('linked_profile_id', null),
+        supabase
+          .from('coach_client_requests')
+          .select('id')
+          .eq('coach_id', user.id)
+          .eq('status', 'accepted')
+          .eq('client_mode', 'offline'),
+      ]);
+
+      const totalOnGround = (walkupCount ?? 0) + (appOfflineRows ?? []).length;
+      if (totalOnGround >= limit) {
+        return {
+          error: `You've reached your ${tier} plan limit of ${limit} on-ground client${limit === 1 ? '' : 's'}. Upgrade to Pro for unlimited clients.`,
+        };
+      }
     }
     // ────────────────────────────────────────────────────────────────────────
 
@@ -264,6 +316,84 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
     });
 
     await get().fetchClientData(true);
+    return { error: null };
+  },
+
+  changeClientMode: async (requestId: string, newMode: 'online' | 'offline') => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: 'Not authenticated' };
+
+    // When moving to online, check the online-client limit
+    if (newMode === 'online') {
+      const ONLINE_LIMITS: Record<string, number> = { starter: 5, pro: Infinity };
+      const { data: subData } = await supabase
+        .from('coach_subscriptions')
+        .select('tier')
+        .eq('coach_id', user.id)
+        .maybeSingle();
+      const tier: string = subData?.tier ?? 'starter';
+      const limit = ONLINE_LIMITS[tier] ?? 5;
+
+      // Fetch all accepted clients and count online ones in JS to safely handle
+      // NULL client_mode rows (NULL = online by default).
+      const { data: acceptedRows } = await supabase
+        .from('coach_client_requests')
+        .select('client_mode')
+        .eq('coach_id', user.id)
+        .eq('status', 'accepted');
+
+      const onlineCount = (acceptedRows ?? []).filter(
+        (r: any) => (r.client_mode ?? 'online') === 'online'
+      ).length;
+
+      if (onlineCount >= limit) {
+        return {
+          error: `You've reached your ${tier} plan limit of ${limit} online client${limit === 1 ? '' : 's'}. Upgrade to Pro to move more clients to online.`,
+        };
+      }
+    }
+
+    // When moving to on-ground, check the on-ground limit.
+    // Total on-ground = pure walkup clients (no app) + app clients already in offline mode.
+    if (newMode === 'offline') {
+      const OFFLINE_LIMITS: Record<string, number> = { starter: 10, pro: Infinity };
+      const { data: subData } = await supabase
+        .from('coach_subscriptions')
+        .select('tier')
+        .eq('coach_id', user.id)
+        .maybeSingle();
+      const tier: string = subData?.tier ?? 'starter';
+      const limit = OFFLINE_LIMITS[tier] ?? 10;
+
+      const [{ count: walkupCount }, { data: appOfflineRows }] = await Promise.all([
+        supabase
+          .from('offline_clients')
+          .select('*', { count: 'exact', head: true })
+          .eq('coach_id', user.id)
+          .is('linked_profile_id', null),
+        supabase
+          .from('coach_client_requests')
+          .select('id')
+          .eq('coach_id', user.id)
+          .eq('status', 'accepted')
+          .eq('client_mode', 'offline'),
+      ]);
+
+      const totalOnGround = (walkupCount ?? 0) + (appOfflineRows ?? []).length;
+      if (totalOnGround >= limit) {
+        return {
+          error: `You've reached your ${tier} plan limit of ${limit} on-ground client${limit === 1 ? '' : 's'}. Upgrade to Pro for unlimited clients.`,
+        };
+      }
+    }
+
+    const { error } = await supabase
+      .from('coach_client_requests')
+      .update({ client_mode: newMode })
+      .eq('id', requestId);
+
+    if (error) return { error: error.message };
+    await get().fetchCoachData(true);
     return { error: null };
   },
 

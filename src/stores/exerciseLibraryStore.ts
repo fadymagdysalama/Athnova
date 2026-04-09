@@ -63,6 +63,21 @@ export const useExerciseLibraryStore = create<ExerciseLibraryState>((set, get) =
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: 'Not authenticated' };
 
+    // ─── Tier enforcement ────────────────────────────────────────────────
+    const EXERCISE_LIMITS: Record<string, number> = { starter: 30, pro: Infinity };
+    const { data: subData } = await supabase
+      .from('coach_subscriptions')
+      .select('tier')
+      .eq('coach_id', user.id)
+      .maybeSingle();
+    const tier: string = subData?.tier ?? 'starter';
+    const limit = EXERCISE_LIMITS[tier] ?? 30;
+    const currentCount = get().exercises.length;
+    if (currentCount >= limit) {
+      return { error: `You've reached your ${tier} plan limit of ${limit} custom exercises. Upgrade to Pro for unlimited exercises.` };
+    }
+    // ─────────────────────────────────────────────────────────────────────
+
     const { data: ex, error } = await supabase
       .from('coach_exercise_library')
       .insert({

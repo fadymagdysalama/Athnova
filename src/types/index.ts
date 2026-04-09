@@ -229,7 +229,7 @@ export interface ProgramPurchase {
   program?: Program;
 }
 
-export type SubscriptionTier = 'starter' | 'pro' | 'business';
+export type SubscriptionTier = 'starter' | 'pro';
 
 export interface CoachSubscription {
   id: string;

@@ -42,7 +42,7 @@ function Avatar({ name, size = 44 }: { name: string; size?: number }) {
 function CoachView() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { pendingRequests, clients, isLoading, fetchCoachData, acceptRequest, rejectRequest, removeClient } = useConnectionStore();
+  const { pendingRequests, clients, isLoading, fetchCoachData, acceptRequest, rejectRequest, removeClient, changeClientMode } = useConnectionStore();
   const { offlineClients, fetchOfflineClients, addOfflineClient, deleteOfflineClient } = useOfflineClientStore();
   const { myPrograms, coachAssignments, fetchMyPrograms, fetchCoachAssignments, assignProgramToOffline, unassignProgramFromOffline } = useProgramStore();
   const { profile } = useAuthStore();
@@ -220,7 +220,11 @@ function CoachView() {
     setSavingWalkup(true);
     const { error } = await addOfflineClient({ display_name: walkupName.trim(), phone: walkupPhone.trim() });
     setSavingWalkup(false);
-    if (error) { showAlert({ title: t('common.error'), message: error }); return; }
+    if (error) {
+      setShowAddWalkup(false);
+      showAlert({ title: t('common.error'), message: error });
+      return;
+    }
     setWalkupName('');
     setWalkupPhone('');
     setShowAddWalkup(false);
@@ -245,11 +249,8 @@ function CoachView() {
       confirmText: 'Move',
       onConfirm: async () => {
         setConfirmModal(null);
-        await supabase
-          .from('coach_client_requests')
-          .update({ client_mode: 'offline' })
-          .eq('id', requestId);
-        await fetchCoachData(true);
+        const { error } = await changeClientMode(requestId, 'offline');
+        if (error) showAlert({ title: t('common.error'), message: error });
       },
     });
   };
@@ -261,11 +262,8 @@ function CoachView() {
       confirmText: 'Move to Online',
       onConfirm: async () => {
         setConfirmModal(null);
-        await supabase
-          .from('coach_client_requests')
-          .update({ client_mode: 'online' })
-          .eq('id', requestId);
-        await fetchCoachData(true);
+        const { error } = await changeClientMode(requestId, 'online');
+        if (error) showAlert({ title: t('common.error'), message: error });
       },
     });
   };

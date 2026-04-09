@@ -29,7 +29,6 @@ interface TierConfig {
 const TIER_RANK: Record<SubscriptionTier, number> = {
   starter: 0,
   pro: 1,
-  business: 2,
 };
 
 const TIERS: TierConfig[] = [
@@ -39,6 +38,10 @@ const TIERS: TierConfig[] = [
     priceKey: 'subscription.starterPrice',
     features: [
       'subscription.starterFeature1',
+      'subscription.starterFeature2',
+      'subscription.starterFeature3',
+      'subscription.starterFeature4',
+      'subscription.starterFeature5',
     ],
     highlighted: false,
     color: colors.textSecondary,
@@ -49,19 +52,13 @@ const TIERS: TierConfig[] = [
     priceKey: 'subscription.proPrice',
     features: [
       'subscription.proFeature1',
+      'subscription.proFeature2',
+      'subscription.proFeature3',
+      'subscription.proFeature4',
+      'subscription.proFeature5',
     ],
     highlighted: true,
     color: colors.primary,
-  },
-  {
-    id: 'business',
-    nameKey: 'subscription.businessName',
-    priceKey: 'subscription.businessPrice',
-    features: [
-      'subscription.businessFeature1',
-    ],
-    highlighted: false,
-    color: colors.accent,
   },
 ];
 

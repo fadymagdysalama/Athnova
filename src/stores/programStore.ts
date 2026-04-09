@@ -176,6 +176,21 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { id: null, error: 'Not authenticated' };
 
+    // ─── Tier enforcement ────────────────────────────────────────────────
+    const PROGRAM_LIMITS: Record<string, number> = { starter: 10, pro: Infinity };
+    const { data: subData } = await supabase
+      .from('coach_subscriptions')
+      .select('tier')
+      .eq('coach_id', user.id)
+      .maybeSingle();
+    const tier: string = subData?.tier ?? 'starter';
+    const limit = PROGRAM_LIMITS[tier] ?? 10;
+    const currentCount = get().myPrograms.length;
+    if (currentCount >= limit) {
+      return { id: null, error: `You've reached your ${tier} plan limit of ${limit} programs. Upgrade to Pro for unlimited programs.` };
+    }
+    // ─────────────────────────────────────────────────────────────────────
+
     const { data: program, error } = await supabase
       .from('programs')
       .insert({ ...data, creator_id: user.id })
@@ -340,6 +355,24 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
 
   // ─── Coach: duplicate a program (new id, copied days + exercises) ─────────
   duplicateProgram: async (id) => {
+    // ─── Tier enforcement ────────────────────────────────────────────────────
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { id: null, error: 'Not authenticated' };
+
+    const PROGRAM_LIMITS: Record<string, number> = { starter: 10, pro: Infinity };
+    const { data: subData } = await supabase
+      .from('coach_subscriptions')
+      .select('tier')
+      .eq('coach_id', user.id)
+      .maybeSingle();
+    const tier: string = subData?.tier ?? 'starter';
+    const limit = PROGRAM_LIMITS[tier] ?? 10;
+    const currentCount = get().myPrograms.length;
+    if (currentCount >= limit) {
+      return { id: null, error: `You've reached your ${tier} plan limit of ${limit} programs. Upgrade to Pro for unlimited programs.` };
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     // Single RPC call – all copying happens server-side in one transaction,
     // eliminating the 6+ sequential round-trips that caused the 7-second delay.
     const { data: newId, error } = await supabase.rpc('duplicate_program', { original_id: id });

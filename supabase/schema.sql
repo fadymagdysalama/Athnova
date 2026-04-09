@@ -540,7 +540,7 @@ ALTER TABLE profiles ADD COLUMN IF NOT EXISTS expo_push_token TEXT;
 CREATE TABLE IF NOT EXISTS coach_subscriptions (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   coach_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE UNIQUE,
-  tier TEXT NOT NULL DEFAULT 'starter' CHECK (tier IN ('starter', 'pro', 'business')),
+  tier TEXT NOT NULL DEFAULT 'starter' CHECK (tier IN ('starter', 'pro')),
   payment_ref TEXT,
   current_period_end TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()

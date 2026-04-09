@@ -35,6 +35,32 @@ export const useOfflineClientStore = create<OfflineClientState>((set, get) => ({
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { id: null, error: 'Not authenticated' };
 
+    // ─── Tier enforcement ────────────────────────────────────────────────
+    const OFFLINE_LIMITS: Record<string, number> = { starter: 10, pro: Infinity };
+    const { data: subData } = await supabase
+      .from('coach_subscriptions')
+      .select('tier')
+      .eq('coach_id', user.id)
+      .maybeSingle();
+    const tier: string = subData?.tier ?? 'starter';
+    const limit = OFFLINE_LIMITS[tier] ?? 10;
+
+    // Total on-ground = pure walkup clients + app clients already in offline mode
+    const [walkupCount, { data: appOfflineRows }] = await Promise.all([
+      Promise.resolve(get().offlineClients.length),
+      supabase
+        .from('coach_client_requests')
+        .select('id')
+        .eq('coach_id', user.id)
+        .eq('status', 'accepted')
+        .eq('client_mode', 'offline'),
+    ]);
+    const totalOnGround = walkupCount + (appOfflineRows ?? []).length;
+    if (totalOnGround >= limit) {
+      return { id: null, error: `You've reached your ${tier} plan limit of ${limit} on-ground client${limit === 1 ? '' : 's'}. Upgrade to Pro for unlimited clients.` };
+    }
+    // ─────────────────────────────────────────────────────────────────────
+
     const { data, error } = await supabase
       .from('offline_clients')
       .insert({ coach_id: user.id, display_name: display_name.trim(), phone: phone?.trim() || null, notes: notes?.trim() || null })
