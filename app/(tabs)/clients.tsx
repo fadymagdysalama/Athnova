@@ -21,6 +21,7 @@ import { useConnectionStore } from '../../src/stores/connectionStore';
 import { useOfflineClientStore } from '../../src/stores/offlineClientStore';
 import { useProgramStore } from '../../src/stores/programStore';
 import { supabase } from '../../src/lib/supabase';
+import { invokeEdgeFunction } from '../../src/lib/invokeEdgeFunction';
 import { AppAlert, useAppAlert } from '../../src/components/AppAlert';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 import type { OfflineClient, Program } from '../../src/types';
@@ -68,6 +69,27 @@ function CoachView() {
   const [showAddWalkup, setShowAddWalkup] = useState(false);
   const [walkupName, setWalkupName] = useState('');
   const [walkupPhone, setWalkupPhone] = useState('');
+
+  // ── AI assistant state ────────────────────────────────────────────────────
+  const [showAiPanel, setShowAiPanel] = useState(false);
+  const [aiQuestion, setAiQuestion] = useState('');
+  const [aiAnswer, setAiAnswer] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const handleAiAsk = async () => {
+    if (!aiQuestion.trim()) return;
+    setAiLoading(true);
+    setAiError(null);
+    setAiAnswer(null);
+    const { data, error } = await invokeEdgeFunction<{ answer: string }>('ai-clients-assistant', { question: aiQuestion.trim() });
+    setAiLoading(false);
+    if (error || !data?.answer) {
+      setAiError(error ?? 'No response from AI. Please try again.');
+      return;
+    }
+    setAiAnswer(data.answer);
+  };
   const [savingWalkup, setSavingWalkup] = useState(false);
 
   // Program picker for on-ground clients
@@ -295,6 +317,54 @@ function CoachView() {
           <View style={styles.usernameTag}>
             <Text style={styles.usernameTagText}>@{profile?.username}</Text>
           </View>
+        </View>
+
+        {/* ── AI Assistant ── */}
+        <View style={styles.aiAssistantCard}>
+          <TouchableOpacity
+            style={styles.aiAssistantHeader}
+            onPress={() => { setShowAiPanel((v) => !v); setAiAnswer(null); setAiError(null); }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.aiAssistantIcon}>✦</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.aiAssistantTitle}>AI Clients Assistant</Text>
+              <Text style={styles.aiAssistantSub}>Ask anything about your clients</Text>
+            </View>
+            <Text style={styles.aiAssistantChevron}>{showAiPanel ? '▲' : '▼'}</Text>
+          </TouchableOpacity>
+
+          {showAiPanel && (
+            <View style={styles.aiAssistantBody}>
+              <TextInput
+                style={styles.aiAssistantInput}
+                placeholder="e.g. Who hasn't had an active session this week? How is Ahmed progressing?"
+                placeholderTextColor={colors.textMuted}
+                value={aiQuestion}
+                onChangeText={(v) => { setAiQuestion(v); setAiAnswer(null); setAiError(null); }}
+                multiline
+                numberOfLines={2}
+                textAlignVertical="top"
+              />
+              {aiError && <Text style={styles.aiAssistantError}>{aiError}</Text>}
+              {aiAnswer && (
+                <View style={styles.aiAnswerBox}>
+                  <Text style={styles.aiAnswerText}>{aiAnswer}</Text>
+                </View>
+              )}
+              <TouchableOpacity
+                style={[styles.aiAssistantBtn, (aiLoading || !aiQuestion.trim()) && styles.aiAssistantBtnDisabled]}
+                onPress={handleAiAsk}
+                disabled={aiLoading || !aiQuestion.trim()}
+                activeOpacity={0.8}
+              >
+                {aiLoading
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={styles.aiAssistantBtnText}>✦ Ask AI</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         {pendingRequests.length > 0 && (
@@ -1142,6 +1212,91 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.2)',
   },
   usernameTagText: { fontSize: fontSize.lg, fontWeight: '800', color: colors.textInverse, letterSpacing: 0.3 },
+
+  // ── AI Assistant card ────────────────────────────────────────────────────
+  aiAssistantCard: {
+    backgroundColor: '#F5F3FF',
+    borderRadius: borderRadius.xl,
+    borderWidth: 1.5,
+    borderColor: '#7C3AED',
+    overflow: 'hidden',
+  },
+  aiAssistantHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.lg,
+  },
+  aiAssistantIcon: {
+    fontSize: 22,
+    color: '#7C3AED',
+    fontWeight: '800',
+  },
+  aiAssistantTitle: {
+    fontSize: fontSize.sm,
+    fontWeight: '800',
+    color: '#5B21B6',
+  },
+  aiAssistantSub: {
+    fontSize: fontSize.xs,
+    color: '#7C3AED',
+    marginTop: 1,
+  },
+  aiAssistantChevron: {
+    fontSize: 13,
+    color: '#7C3AED',
+    fontWeight: '700',
+  },
+  aiAssistantBody: {
+    borderTopWidth: 1,
+    borderTopColor: '#DDD6FE',
+    padding: spacing.lg,
+    gap: spacing.md,
+    backgroundColor: '#fff',
+  },
+  aiAssistantInput: {
+    backgroundColor: '#F5F3FF',
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+    borderColor: '#7C3AED',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    fontSize: fontSize.sm,
+    color: colors.text,
+    minHeight: 72,
+    textAlignVertical: 'top',
+  },
+  aiAssistantError: {
+    fontSize: fontSize.xs,
+    color: colors.error,
+    fontWeight: '600',
+  },
+  aiAnswerBox: {
+    backgroundColor: '#F5F3FF',
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    padding: spacing.md,
+  },
+  aiAnswerText: {
+    fontSize: fontSize.sm,
+    color: '#3B0764',
+    lineHeight: 20,
+  },
+  aiAssistantBtn: {
+    backgroundColor: '#7C3AED',
+    borderRadius: borderRadius.full,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+  },
+  aiAssistantBtnDisabled: {
+    opacity: 0.45,
+  },
+  aiAssistantBtnText: {
+    fontSize: fontSize.sm,
+    fontWeight: '800',
+    color: '#fff',
+  },
   section: { gap: spacing.sm },
   sectionTitle: { fontSize: fontSize.xs, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1 },
   requestCard: {

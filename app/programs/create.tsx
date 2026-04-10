@@ -350,6 +350,67 @@ function Step2({
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
+  // ── Whole-program AI state ────────────────────────────────────────────────
+  const [showAiProgram, setShowAiProgram] = useState(false);
+  const [aiProgramText, setAiProgramText] = useState('');
+  const [aiProgramLoading, setAiProgramLoading] = useState(false);
+  const [aiProgramError, setAiProgramError] = useState<string | null>(null);
+
+  const handleAiProgramFill = async () => {
+    if (!aiProgramText.trim()) return;
+    setAiProgramLoading(true);
+    setAiProgramError(null);
+    const { data, error } = await invokeEdgeFunction<{
+      program: Array<{
+        day_number: number;
+        exercises: Array<{
+          exercise_name: string;
+          sets: number;
+          reps: string;
+          rest_time: string;
+          weight: string;
+          notes: string;
+          superset_group: number | null;
+        }>;
+      }>;
+    }>('ai-parse-program', { text: aiProgramText.trim() });
+    setAiProgramLoading(false);
+
+    if (error || !data?.program?.length) {
+      setAiProgramError(error ?? 'No program data returned. Try describing each day more clearly.');
+      return;
+    }
+
+    const now = Date.now();
+    const updatedDays = days.map((d) => {
+      const parsed = data.program.find((p) => p.day_number === d.day_number);
+      if (!parsed || !parsed.exercises.length) return d;
+      return {
+        ...d,
+        exercises: parsed.exercises.map((e, i) => ({
+          key: `ai-prog-${now}-${d.day_number}-${i}`,
+          exercise_name: e.exercise_name,
+          sets: String(e.sets),
+          reps: e.reps,
+          rest_time: e.rest_time,
+          notes: e.notes,
+          video_url: '',
+          superset_group: e.superset_group,
+          weight: e.weight,
+          isAiGenerated: true,
+        })),
+      };
+    });
+
+    setDays(updatedDays);
+    const filledCount = data.program.length;
+    setAiProgramText('');
+    setShowAiProgram(false);
+    // Auto-expand first day
+    if (updatedDays.length > 0) setExpandedDay(updatedDays[0].key);
+    showAlert({ title: '✦ Done', message: `AI filled ${filledCount} day${filledCount !== 1 ? 's' : ''} of your program.` });
+  };
+
   const handleAiFill = async (dayKey: string) => {
     if (!aiText.trim()) return;
     setAiLoading(true);
@@ -450,6 +511,58 @@ function Step2({
 
   return (
     <ScrollView contentContainerStyle={styles.stepContent} keyboardShouldPersistTaps="handled">
+
+      {/* ── Whole-program AI button ── */}
+      <TouchableOpacity
+        style={[styles.aiProgramBannerBtn, showAiProgram && styles.aiProgramBannerBtnActive]}
+        onPress={() => { setShowAiProgram((v) => !v); setAiProgramError(null); }}
+        activeOpacity={0.8}
+      >
+        <Text style={[styles.aiProgramBannerIcon, showAiProgram && { color: '#fff' }]}>✦</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.aiProgramBannerTitle, showAiProgram && { color: '#fff' }]}>AI — Fill Entire Program</Text>
+          <Text style={[styles.aiProgramBannerSub, showAiProgram && { color: '#E9D5FF' }]}>Describe all {durationDays} days at once</Text>
+        </View>
+        <Text style={[styles.aiProgramBannerChevron, showAiProgram && { color: '#fff' }]}>{showAiProgram ? '▲' : '▼'}</Text>
+      </TouchableOpacity>
+
+      {showAiProgram && (
+        <View style={styles.aiProgramPanel}>
+          <Text style={styles.aiPanelTitle}>✦ Describe your full program</Text>
+          <Text style={styles.aiPanelSubtitle}>Label each day: "Day 1: chest bench press 4x10...", "Day 2: legs..."</Text>
+          <TextInput
+            style={[styles.input, styles.aiTextarea, styles.aiProgramTextarea]}
+            placeholder={`e.g.\nDay 1: bench press 4x10, incline dumbbell 3x12\nDay 2: squat 5x8 wazn 60kg, leg press 3x15\nDay 3: rest`}
+            placeholderTextColor={colors.textMuted}
+            value={aiProgramText}
+            onChangeText={(v) => { setAiProgramText(v); setAiProgramError(null); }}
+            multiline
+            numberOfLines={6}
+            autoFocus
+            textAlignVertical="top"
+          />
+          {aiProgramError && <Text style={styles.aiError}>{aiProgramError}</Text>}
+          <View style={styles.aiActions}>
+            <TouchableOpacity
+              style={styles.aiCancelBtn}
+              onPress={() => { setShowAiProgram(false); setAiProgramText(''); setAiProgramError(null); }}
+            >
+              <Text style={styles.aiCancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.aiGenerateBtn, (aiProgramLoading || !aiProgramText.trim()) && styles.btnDisabled]}
+              onPress={handleAiProgramFill}
+              disabled={aiProgramLoading || !aiProgramText.trim()}
+            >
+              {aiProgramLoading
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={styles.aiGenerateBtnText}>✦ Generate All Days</Text>
+              }
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       {days.map((day) => (
         <View key={day.key} style={styles.dayCard}>
           <TouchableOpacity
@@ -1110,10 +1223,59 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#fff',
   },
+  // ── Whole-program AI banner + panel ──────────────────────────────────────
+  aiProgramBannerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: '#F5F3FF',
+    borderRadius: borderRadius.lg,
+    borderWidth: 1.5,
+    borderColor: '#7C3AED',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  aiProgramBannerBtnActive: {
+    backgroundColor: '#7C3AED',
+  },
+  aiProgramBannerIcon: {
+    fontSize: 20,
+    color: '#7C3AED',
+    fontWeight: '800',
+  },
+  aiProgramBannerTitle: {
+    fontSize: fontSize.sm,
+    fontWeight: '800',
+    color: '#5B21B6',
+  },
+  aiProgramBannerSub: {
+    fontSize: fontSize.xs,
+    color: '#7C3AED',
+    marginTop: 1,
+  },
+  aiProgramBannerChevron: {
+    fontSize: 14,
+    color: '#7C3AED',
+    fontWeight: '700',
+  },
+  aiProgramPanel: {
+    backgroundColor: '#F5F3FF',
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+    borderColor: '#7C3AED',
+    padding: spacing.md,
+    gap: spacing.sm,
+    marginTop: -spacing.md,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+  },
+  aiProgramTextarea: {
+    minHeight: 120,
+  },
   // AI-generated exercise row highlight
   exerciseRowAi: {
     borderColor: '#7C3AED',
-    borderStyle: 'dashed',
+    borderStyle: 'solid',
   },
   aiBadge: {
     backgroundColor: '#7C3AED',

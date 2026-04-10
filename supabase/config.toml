@@ -1,6 +1,12 @@
 [functions.ai-parse-workout]
 verify_jwt = false
 
+[functions.ai-parse-program]
+verify_jwt = false
+
+[functions.ai-clients-assistant]
+verify_jwt = false
+
 [functions.send-push]
 verify_jwt = false
 
