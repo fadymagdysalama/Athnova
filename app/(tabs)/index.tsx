@@ -87,6 +87,7 @@ export default function HomeScreen() {
   const { profile } = useAuthStore();
   const { myClientMode, clientDataLoaded } = useConnectionStore();
   const { unreadCount, fetchNotifications } = useNotificationStore();
+  const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [upcomingSessions, setUpcomingSessions] = useState<UpcomingSessionItem[]>([]);
   const [todayWorkout, setTodayWorkout] = useState<{
@@ -113,6 +114,9 @@ export default function HomeScreen() {
       fetchNotifications();
 
       let isMounted = true;
+      // Only show the "—" placeholder on the very first load.
+      // On subsequent focus events keep showing the previous data while refreshing silently.
+      if (stats === null) setLoading(true);
 
       const loadDashboard = async () => {
       const now = new Date();
@@ -167,6 +171,7 @@ export default function HomeScreen() {
           offlineCount: (s.session_offline_clients ?? []).length,
         } as UpcomingSessionItem));
         setUpcomingSessions(filteredCoachSessions);
+        setLoading(false);
         return;
       }
 
@@ -183,18 +188,27 @@ export default function HomeScreen() {
 
       const sessionIds = (sessionIdsRes.data ?? []).map((item: any) => item.session_id as string);
 
-      // Upcoming sessions (used by both client types)
-      const upcomingRes = sessionIds.length > 0
-        ? await supabase
-            .from('sessions')
-            .select('id, date, start_time, notes')
-            .in('id', sessionIds)
-            .eq('status', 'scheduled')
-            .gte('date', today)
-            .order('date', { ascending: true })
-            .order('start_time', { ascending: true })
-            .limit(5)
-        : { data: [] };
+      // Run upcoming sessions and (for online clients) program_assignments in parallel
+      const [upcomingRes, assignmentsRes] = await Promise.all([
+        sessionIds.length > 0
+          ? supabase
+              .from('sessions')
+              .select('id, date, start_time, notes')
+              .in('id', sessionIds)
+              .eq('status', 'scheduled')
+              .gte('date', today)
+              .order('date', { ascending: true })
+              .order('start_time', { ascending: true })
+              .limit(5)
+          : Promise.resolve({ data: [] }),
+        !isOnGroundClient
+          ? supabase
+              .from('program_assignments')
+              .select('id, program_id, current_day, program:programs(id, title, duration_days)', { count: 'exact' })
+              .eq('client_id', profile.id)
+              .order('started_at', { ascending: false })
+          : Promise.resolve({ data: [], count: 0 }),
+      ]);
 
       if (!isMounted) return;
 
@@ -222,19 +236,13 @@ export default function HomeScreen() {
           secondaryLabel: t('home.upcomingSessions'),
         });
         setTodayWorkout(null);
+        // Only set loading to false if this is the first load (stats was null)
+        if (loading) setLoading(false);
+        // Never set stats to null after first load
+        // On subsequent tab changes, keep showing the last stats value
       } else {
         // Online: programs + days done + next workout
-        const [assignmentsRes] = await Promise.all([
-          supabase
-            .from('program_assignments')
-            .select('id, program_id, current_day, program:programs(id, title, duration_days)', { count: 'exact' })
-            .eq('client_id', profile.id)
-            .order('started_at', { ascending: false }),
-        ]);
-
-        if (!isMounted) return;
-
-        const rawAssignments = (assignmentsRes.data ?? []) as unknown as Array<{
+        const rawAssignments = ((assignmentsRes as any).data ?? []) as Array<{
           id: string;
           program_id: string;
           current_day: number;
@@ -244,49 +252,36 @@ export default function HomeScreen() {
         const firstAssignment = validAssignments[0];
 
         setStats({
-          primaryCount: assignmentsRes.count ?? 0,
+          primaryCount: (assignmentsRes as any).count ?? 0,
           secondaryCount: workoutsRes.count ?? 0,
           primaryLabel: t('home.activePrograms'),
           secondaryLabel: t('home.daysDone'),
         });
 
-        // Next workout
+        // Next workout — use current_day from the assignment to avoid extra round trips.
+        // Fetch the day record + its exercises in a single join query.
         if (firstAssignment?.program) {
-          const { data: workoutLogs } = await supabase
-            .from('workout_logs')
-            .select('day_id')
-            .eq('client_id', profile.id)
-            .eq('program_id', firstAssignment.program_id);
+          const nextDayNumber = firstAssignment.current_day ?? 1;
 
-          if (!isMounted) return;
-
-          const completedDayIds = new Set((workoutLogs ?? []).map((l: any) => l.day_id as string));
-
-          const { data: allDays } = await supabase
+          const { data: dayWithExercises } = await supabase
             .from('program_days')
-            .select('id, day_number')
+            .select('id, day_number, program_exercises(exercise_name, sets, reps, order_index)')
             .eq('program_id', firstAssignment.program_id)
-            .order('day_number', { ascending: true });
+            .eq('day_number', nextDayNumber)
+            .maybeSingle();
 
           if (!isMounted) return;
 
-          const nextDay = (allDays ?? []).find((d: any) => !completedDayIds.has(d.id));
-
-          if (nextDay) {
-            const { data: exercises } = await supabase
-              .from('program_exercises')
-              .select('exercise_name, sets, reps')
-              .eq('day_id', nextDay.id)
-              .order('order_index', { ascending: true })
-              .limit(3);
-
-            if (!isMounted) return;
+          if (dayWithExercises) {
+            const sortedExercises = ((dayWithExercises as any).program_exercises ?? [])
+              .sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0))
+              .slice(0, 3);
             setTodayWorkout({
               programTitle: firstAssignment.program!.title,
-              currentDay: nextDay.day_number,
+              currentDay: (dayWithExercises as any).day_number,
               totalDays: firstAssignment.program!.duration_days,
               programId: firstAssignment.program_id,
-              exercises: (exercises ?? []) as Array<{ exercise_name: string; sets: number; reps: string }>,
+              exercises: sortedExercises as Array<{ exercise_name: string; sets: number; reps: string }>,
             });
           } else {
             setTodayWorkout(null);
@@ -294,6 +289,7 @@ export default function HomeScreen() {
         } else {
           setTodayWorkout(null);
         }
+        setLoading(false);
       }
     };
 
@@ -345,7 +341,7 @@ export default function HomeScreen() {
         <View style={styles.statsRow}>
           <StatCard
             label={stats?.primaryLabel ?? (isCoach ? t('home.activeClients') : isOnGroundClient ? 'Sessions Done' : t('home.activePrograms'))}
-            value={String(stats?.primaryCount ?? 0)}
+            value={loading ? '—' : String(stats?.primaryCount ?? 0)}
             accent
             onPress={() => {
               if (isCoach) router.push('/(tabs)/clients');
@@ -355,7 +351,7 @@ export default function HomeScreen() {
           />
           <StatCard
             label={stats?.secondaryLabel ?? (isCoach ? t('home.activePrograms') : isOnGroundClient ? t('home.upcomingSessions') : t('home.daysDone'))}
-            value={String(stats?.secondaryCount ?? 0)}
+            value={loading ? '—' : String(stats?.secondaryCount ?? 0)}
             onPress={() => {
               if (isCoach) router.push('/(tabs)/programs');
               else if (isOnGroundClient) router.push('/(tabs)/schedule');

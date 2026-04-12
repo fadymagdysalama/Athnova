@@ -17,6 +17,7 @@ import { colors, spacing, fontSize, borderRadius } from '../../src/constants/the
 import { ExerciseLibraryDrawer } from '../../src/components/ExerciseLibraryDrawer';
 import { AppAlert, useAppAlert } from '../../src/components/AppAlert';
 import { useExerciseLibraryStore } from '../../src/stores/exerciseLibraryStore';
+import { invokeEdgeFunction } from '../../src/lib/invokeEdgeFunction';
 import type { ExerciseTemplate } from '../../src/types';
 
 interface ExerciseDraft {
@@ -92,7 +93,16 @@ export default function EditProgramScreen() {
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [libraryDayId, setLibraryDayId] = useState<string | null>(null);
   const { alertProps, showAlert } = useAppAlert();
-  const { add: addToLibrary } = useExerciseLibraryStore();
+  const { add: addToLibrary, exercises: libraryExercises, fetch: fetchLibrary } = useExerciseLibraryStore();
+  // ── AI state ──────────────────────────────────────────────────────────────
+  const [aiInputDayId, setAiInputDayId] = useState<string | null>(null);
+  const [aiText, setAiText] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [showAiProgram, setShowAiProgram] = useState(false);
+  const [aiProgramText, setAiProgramText] = useState('');
+  const [aiProgramLoading, setAiProgramLoading] = useState(false);
+  const [aiProgramError, setAiProgramError] = useState<string | null>(null);
 
   const handleAddToLibrary = async (ex: ExerciseDraft) => {
     if (!ex.exercise_name.trim()) return;
@@ -113,7 +123,113 @@ export default function EditProgramScreen() {
 
   useEffect(() => {
     if (id) fetchProgramWithDays(id);
+    fetchLibrary();
   }, [id]);
+
+  // Find a matching exercise in the library by name (case-insensitive exact match)
+  const matchFromLibrary = React.useCallback((name: string) => {
+    const n = name.toLowerCase().trim();
+    return libraryExercises.find(e => e.name.toLowerCase().trim() === n) ?? null;
+  }, [libraryExercises]);
+
+  const handleAiFill = async (dayId: string) => {
+    if (!aiText.trim()) return;
+    setAiLoading(true);
+    setAiError(null);
+    const currentDay = days.find((d) => d.id === dayId);
+    const hasExercises = (currentDay?.exercises ?? []).length > 0;
+    let requestText = aiText.trim();
+    if (hasExercises && currentDay) {
+      const existingJson = JSON.stringify(currentDay.exercises.map((e) => ({
+        exercise_name: e.exercise_name,
+        sets: parseInt(e.sets, 10) || 3,
+        reps: e.reps,
+        rest_time: e.rest_time,
+        weight: e.weight,
+        notes: e.notes,
+        superset_group: e.superset_group,
+      })));
+      requestText = `CURRENT EXERCISES (JSON):\n${existingJson}\n---\nINSTRUCTION: ${aiText.trim()}`;
+    }
+    const { data, error } = await invokeEdgeFunction<{ exercises: Array<{
+      exercise_name: string; sets: number; reps: string; rest_time: string;
+      weight: string; notes: string; superset_group: number | null;
+    }> }>('ai-parse-workout', { text: requestText });
+    setAiLoading(false);
+    if (error || !data?.exercises?.length) {
+      setAiError(error ?? 'No exercises parsed. Try describing the workout in more detail.');
+      return;
+    }
+    const now = Date.now();
+    const newExercises: ExerciseDraft[] = data.exercises.map((e, i) => {
+      const lib = matchFromLibrary(e.exercise_name);
+      return {
+        id: null,
+        key: `ai-edit-${now}-${i}`,
+        exercise_name: e.exercise_name,
+        sets: lib?.default_sets ?? String(e.sets),
+        reps: lib?.default_reps ?? e.reps,
+        rest_time: e.rest_time,
+        notes: lib?.default_notes ?? e.notes,
+        video_url: lib?.video_url ?? '',
+        order_index: i,
+        superset_group: e.superset_group,
+        weight: e.weight,
+      };
+    });
+    setDays((prev) => prev.map((d) => d.id !== dayId ? d : { ...d, exercises: newExercises }));
+    setAiText('');
+    setAiInputDayId(null);
+  };
+
+  const handleAiProgramFill = async () => {
+    if (!aiProgramText.trim()) return;
+    setAiProgramLoading(true);
+    setAiProgramError(null);
+    const { data, error } = await invokeEdgeFunction<{
+      program: Array<{
+        day_number: number;
+        exercises: Array<{
+          exercise_name: string; sets: number; reps: string; rest_time: string;
+          weight: string; notes: string; superset_group: number | null;
+        }>;
+      }>;
+    }>('ai-parse-program', { text: aiProgramText.trim() });
+    setAiProgramLoading(false);
+    if (error || !data?.program?.length) {
+      setAiProgramError(error ?? 'No program data returned. Try describing each day more clearly.');
+      return;
+    }
+    const now = Date.now();
+    setDays((prev) => prev.map((d) => {
+      const parsed = data.program.find((p) => p.day_number === d.day_number);
+      if (!parsed || !parsed.exercises.length) return d;
+      return {
+        ...d,
+        exercises: parsed.exercises.map((e, i) => {
+          const lib = matchFromLibrary(e.exercise_name);
+          return {
+            id: null,
+            key: `ai-prog-edit-${now}-${d.day_number}-${i}`,
+            exercise_name: e.exercise_name,
+            sets: lib?.default_sets ?? String(e.sets),
+            reps: lib?.default_reps ?? e.reps,
+            rest_time: e.rest_time,
+            notes: lib?.default_notes ?? e.notes,
+            video_url: lib?.video_url ?? '',
+            order_index: i,
+            superset_group: e.superset_group,
+            weight: e.weight,
+          };
+        }),
+      };
+    }));
+    const filledCount = data.program.filter(p => p.exercises.length > 0).length;
+    setAiProgramText('');
+    setShowAiProgram(false);
+    setExpandedDay(days[0]?.id ?? null);
+    showAlert({ title: '✦ Done', message: `AI filled ${filledCount} day${filledCount !== 1 ? 's' : ''} of your program.` });
+  };
 
   useEffect(() => {
     if (!currentProgram) return;
@@ -329,6 +445,56 @@ export default function EditProgramScreen() {
           </View>
         </View>
 
+        {/* ── AI whole-program banner ── */}
+        <TouchableOpacity
+          style={[aiEditStyles.aiProgramBannerBtn, showAiProgram && aiEditStyles.aiProgramBannerBtnActive]}
+          onPress={() => { setShowAiProgram((v) => !v); setAiProgramError(null); }}
+          activeOpacity={0.8}
+        >
+          <Text style={[aiEditStyles.aiProgramBannerIcon, showAiProgram && { color: '#fff' }]}>✦</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={[aiEditStyles.aiProgramBannerTitle, showAiProgram && { color: '#fff' }]}>AI — Rewrite Entire Program</Text>
+            <Text style={[aiEditStyles.aiProgramBannerSub, showAiProgram && { color: '#E9D5FF' }]}>Describe all {days.length} days at once</Text>
+          </View>
+          <Text style={[aiEditStyles.aiProgramBannerChevron, showAiProgram && { color: '#fff' }]}>{showAiProgram ? '▲' : '▼'}</Text>
+        </TouchableOpacity>
+
+        {showAiProgram && (
+          <View style={aiEditStyles.aiProgramPanel}>
+            <Text style={aiEditStyles.aiPanelTitle}>✦ Describe your full program</Text>
+            <Text style={aiEditStyles.aiPanelSubtitle}>Label each day: "Day 1: chest bench press 4x10...", "Day 2: legs..."</Text>
+            <TextInput
+              style={[styles.input, styles.textarea, { minHeight: 120, borderColor: '#7C3AED', backgroundColor: '#fff' }]}
+              placeholder={`e.g.\nDay 1: bench press 4x10, incline dumbbell 3x12\nDay 2: squat 5x8 wazn 60kg, leg press 3x15`}
+              placeholderTextColor={colors.textMuted}
+              value={aiProgramText}
+              onChangeText={(v) => { setAiProgramText(v); setAiProgramError(null); }}
+              multiline
+              numberOfLines={6}
+              textAlignVertical="top"
+            />
+            {aiProgramError && <Text style={aiEditStyles.aiError}>{aiProgramError}</Text>}
+            <View style={aiEditStyles.aiActions}>
+              <TouchableOpacity
+                style={aiEditStyles.aiCancelBtn}
+                onPress={() => { setShowAiProgram(false); setAiProgramText(''); setAiProgramError(null); }}
+              >
+                <Text style={aiEditStyles.aiCancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[aiEditStyles.aiGenerateBtn, (aiProgramLoading || !aiProgramText.trim()) && aiEditStyles.aiGenerateBtnDisabled]}
+                onPress={handleAiProgramFill}
+                disabled={aiProgramLoading || !aiProgramText.trim()}
+              >
+                {aiProgramLoading
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={aiEditStyles.aiGenerateBtnText}>✦ Generate All Days</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* Days & exercises */}
         <Text style={styles.sectionLabel}>{t('programs.step2')}</Text>
         {days.map((day, dayIdx) => (
@@ -509,6 +675,54 @@ export default function EditProgramScreen() {
                   )}
                   </React.Fragment>
                 ))}
+                {/* AI fill input panel */}
+                {aiInputDayId === day.id && (() => {
+                  const isRefinement = day.exercises.length > 0;
+                  return (
+                    <View style={aiEditStyles.aiPanel}>
+                      <Text style={aiEditStyles.aiPanelTitle}>
+                        {isRefinement ? '✦ Refine this day' : '✦ Describe the workout'}
+                      </Text>
+                      <Text style={aiEditStyles.aiPanelSubtitle}>
+                        {isRefinement
+                          ? 'Describe what to change — AI updates only what you ask'
+                          : 'Arabic, English, or both — AI will structure it'}
+                      </Text>
+                      <TextInput
+                        style={[styles.input, styles.textarea, { borderColor: '#7C3AED', backgroundColor: '#fff' }]}
+                        placeholder={isRefinement
+                          ? 'e.g. change exercise 1 to barbell row 5x8, increase bench press weight to 40kg...'
+                          : 'e.g. bench press 4x10 wazn 20kg, ba3diha superset dumbbell fly 30kg'}
+                        placeholderTextColor={colors.textMuted}
+                        value={aiText}
+                        onChangeText={(v) => { setAiText(v); setAiError(null); }}
+                        multiline
+                        numberOfLines={4}
+                        autoFocus
+                        textAlignVertical="top"
+                      />
+                      {aiError && <Text style={aiEditStyles.aiError}>{aiError}</Text>}
+                      <View style={aiEditStyles.aiActions}>
+                        <TouchableOpacity
+                          style={aiEditStyles.aiCancelBtn}
+                          onPress={() => { setAiInputDayId(null); setAiText(''); setAiError(null); }}
+                        >
+                          <Text style={aiEditStyles.aiCancelBtnText}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[aiEditStyles.aiGenerateBtn, (aiLoading || !aiText.trim()) && aiEditStyles.aiGenerateBtnDisabled]}
+                          onPress={() => handleAiFill(day.id)}
+                          disabled={aiLoading || !aiText.trim()}
+                        >
+                          {aiLoading
+                            ? <ActivityIndicator size="small" color="#fff" />
+                            : <Text style={aiEditStyles.aiGenerateBtnText}>{isRefinement ? '✦ Refine' : '✦ Generate'}</Text>
+                          }
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                })()}
                 <View style={styles.addExRow}>
                   <TouchableOpacity
                     style={styles.addExBtn}
@@ -521,6 +735,18 @@ export default function EditProgramScreen() {
                     onPress={() => setLibraryDayId(day.id)}
                   >
                     <Text style={styles.libraryBtnText}>📚 {t('library.fromLibrary')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[aiEditStyles.aiBtn, aiInputDayId === day.id && aiEditStyles.aiBtnActive]}
+                    onPress={() => {
+                      if (aiInputDayId === day.id) {
+                        setAiInputDayId(null); setAiText(''); setAiError(null);
+                      } else {
+                        setAiInputDayId(day.id);
+                      }
+                    }}
+                  >
+                    <Text style={[aiEditStyles.aiBtnText, aiInputDayId === day.id && aiEditStyles.aiBtnTextActive]}>✦ AI</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -841,4 +1067,61 @@ const editStyles = StyleSheet.create({
   unitBtnActive: { backgroundColor: colors.primary },
   unitBtnText: { fontSize: fontSize.xs, fontWeight: '700' as const, color: colors.textMuted },
   unitBtnTextActive: { color: '#fff' },
+});
+
+// ── AI-specific styles for Edit screen ──────────────────────────────────────────────────
+const aiEditStyles = StyleSheet.create({
+  aiBtn: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.full,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#7C3AED',
+  },
+  aiBtnActive: { backgroundColor: '#7C3AED' },
+  aiBtnText: { fontSize: fontSize.sm, fontWeight: '700', color: '#7C3AED' },
+  aiBtnTextActive: { color: '#fff' },
+  aiPanel: {
+    backgroundColor: '#F5F3FF',
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+    borderColor: '#7C3AED',
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  aiPanelTitle: { fontSize: fontSize.sm, fontWeight: '800', color: '#5B21B6' },
+  aiPanelSubtitle: { fontSize: fontSize.xs, color: '#7C3AED', marginTop: -4 },
+  aiError: { fontSize: fontSize.xs, color: colors.error, fontWeight: '600' },
+  aiActions: { flexDirection: 'row', gap: spacing.sm, marginTop: 2 },
+  aiCancelBtn: {
+    flex: 1, paddingVertical: spacing.sm, borderRadius: borderRadius.full,
+    alignItems: 'center', borderWidth: 1.5, borderColor: '#7C3AED', backgroundColor: '#fff',
+  },
+  aiCancelBtnText: { fontSize: fontSize.sm, fontWeight: '700', color: '#7C3AED' },
+  aiGenerateBtn: {
+    flex: 2, paddingVertical: spacing.sm, borderRadius: borderRadius.full,
+    alignItems: 'center', backgroundColor: '#7C3AED',
+  },
+  aiGenerateBtnDisabled: { opacity: 0.5 },
+  aiGenerateBtnText: { fontSize: fontSize.sm, fontWeight: '700', color: '#fff' },
+  aiProgramBannerBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: '#F5F3FF', borderRadius: borderRadius.lg,
+    borderWidth: 1.5, borderColor: '#7C3AED',
+    paddingHorizontal: spacing.md, paddingVertical: spacing.md,
+  },
+  aiProgramBannerBtnActive: { backgroundColor: '#7C3AED' },
+  aiProgramBannerIcon: { fontSize: 20, color: '#7C3AED', fontWeight: '800' },
+  aiProgramBannerTitle: { fontSize: fontSize.sm, fontWeight: '800', color: '#5B21B6' },
+  aiProgramBannerSub: { fontSize: fontSize.xs, color: '#7C3AED', marginTop: 1 },
+  aiProgramBannerChevron: { fontSize: 14, color: '#7C3AED', fontWeight: '700' },
+  aiProgramPanel: {
+    backgroundColor: '#F5F3FF', borderRadius: borderRadius.md,
+    borderWidth: 1.5, borderColor: '#7C3AED',
+    padding: spacing.md, gap: spacing.sm,
+    marginTop: -spacing.md, borderTopLeftRadius: 0, borderTopRightRadius: 0,
+  },
 });

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -325,9 +325,18 @@ function Step2({
   showAlert: (opts: { title: string; message: string }) => void;
 }) {
   const { t } = useTranslation();
-  const { add: addToLibrary } = useExerciseLibraryStore();
+  const { add: addToLibrary, exercises: libraryExercises, fetch: fetchLibrary } = useExerciseLibraryStore();
   const [expandedDay, setExpandedDay] = useState<string | null>(days[0]?.key ?? null);
   const [libraryDayKey, setLibraryDayKey] = useState<string | null>(null);
+
+  // Ensure library is loaded for AI exercise name matching
+  useEffect(() => { fetchLibrary(); }, []);
+
+  // Find a matching exercise in the library by name (case-insensitive exact match)
+  const matchFromLibrary = React.useCallback((name: string) => {
+    const n = name.toLowerCase().trim();
+    return libraryExercises.find(e => e.name.toLowerCase().trim() === n) ?? null;
+  }, [libraryExercises]);
 
   const handleAddToLibrary = async (ex: ExerciseDraft) => {
     if (!ex.exercise_name.trim()) return;
@@ -387,18 +396,21 @@ function Step2({
       if (!parsed || !parsed.exercises.length) return d;
       return {
         ...d,
-        exercises: parsed.exercises.map((e, i) => ({
-          key: `ai-prog-${now}-${d.day_number}-${i}`,
-          exercise_name: e.exercise_name,
-          sets: String(e.sets),
-          reps: e.reps,
-          rest_time: e.rest_time,
-          notes: e.notes,
-          video_url: '',
-          superset_group: e.superset_group,
-          weight: e.weight,
-          isAiGenerated: true,
-        })),
+        exercises: parsed.exercises.map((e, i) => {
+          const lib = matchFromLibrary(e.exercise_name);
+          return {
+            key: `ai-prog-${now}-${d.day_number}-${i}`,
+            exercise_name: e.exercise_name,
+            sets: lib?.default_sets ?? String(e.sets),
+            reps: lib?.default_reps ?? e.reps,
+            rest_time: e.rest_time,
+            notes: lib?.default_notes ?? e.notes,
+            video_url: lib?.video_url ?? '',
+            superset_group: e.superset_group,
+            weight: e.weight,
+            isAiGenerated: !lib,
+          };
+        }),
       };
     });
 
@@ -415,6 +427,21 @@ function Step2({
     if (!aiText.trim()) return;
     setAiLoading(true);
     setAiError(null);
+    const currentDay = days.find((d) => d.key === dayKey);
+    const hasExercises = (currentDay?.exercises ?? []).length > 0;
+    let requestText = aiText.trim();
+    if (hasExercises && currentDay) {
+      const existingJson = JSON.stringify(currentDay.exercises.map((e) => ({
+        exercise_name: e.exercise_name,
+        sets: parseInt(e.sets, 10) || 3,
+        reps: e.reps,
+        rest_time: e.rest_time,
+        weight: e.weight,
+        notes: e.notes,
+        superset_group: e.superset_group,
+      })));
+      requestText = `CURRENT EXERCISES (JSON):\n${existingJson}\n---\nINSTRUCTION: ${aiText.trim()}`;
+    }
     const { data, error } = await invokeEdgeFunction<{ exercises: Array<{
       exercise_name: string;
       sets: number;
@@ -423,25 +450,28 @@ function Step2({
       weight: string;
       notes: string;
       superset_group: number | null;
-    }> }>('ai-parse-workout', { text: aiText.trim() });
+    }> }>('ai-parse-workout', { text: requestText });
     setAiLoading(false);
     if (error || !data?.exercises?.length) {
       setAiError(error ?? 'No exercises parsed. Try describing the workout in more detail.');
       return;
     }
     const now = Date.now();
-    const newExercises: ExerciseDraft[] = data.exercises.map((e, i) => ({
-      key: `ai-${now}-${i}`,
-      exercise_name: e.exercise_name,
-      sets: String(e.sets),
-      reps: e.reps,
-      rest_time: e.rest_time,
-      notes: e.notes,
-      video_url: '',
-      superset_group: e.superset_group,
-      weight: e.weight,
-      isAiGenerated: true,
-    }));
+    const newExercises: ExerciseDraft[] = data.exercises.map((e, i) => {
+      const lib = matchFromLibrary(e.exercise_name);
+      return {
+        key: `ai-${now}-${i}`,
+        exercise_name: e.exercise_name,
+        sets: lib?.default_sets ?? String(e.sets),
+        reps: lib?.default_reps ?? e.reps,
+        rest_time: e.rest_time,
+        notes: lib?.default_notes ?? e.notes,
+        video_url: lib?.video_url ?? '',
+        superset_group: e.superset_group,
+        weight: e.weight,
+        isAiGenerated: !lib,
+      };
+    });
     setDays(days.map((d) => d.key === dayKey ? { ...d, exercises: newExercises } : d));
     setAiText('');
     setAiInputDayKey(null);
@@ -612,42 +642,53 @@ function Step2({
                 </React.Fragment>
               ))}
               {/* AI fill input panel */}
-              {aiInputDayKey === day.key && (
-                <View style={styles.aiPanel}>
-                  <Text style={styles.aiPanelTitle}>✦ Describe the workout</Text>
-                  <Text style={styles.aiPanelSubtitle}>Arabic, English, or both — AI will structure it for you</Text>
-                  <TextInput
-                    style={[styles.input, styles.aiTextarea]}
-                    placeholder={'e.g. bench press 4x10 wazn 20kg rayyah 30 sania, ba3diha superset dumbbell fly 30kg 4x10'}
-                    placeholderTextColor={colors.textMuted}
-                    value={aiText}
-                    onChangeText={(v) => { setAiText(v); setAiError(null); }}
-                    multiline
-                    numberOfLines={4}
-                    autoFocus
-                    textAlignVertical="top"
-                  />
-                  {aiError && <Text style={styles.aiError}>{aiError}</Text>}
-                  <View style={styles.aiActions}>
-                    <TouchableOpacity
-                      style={styles.aiCancelBtn}
-                      onPress={() => { setAiInputDayKey(null); setAiText(''); setAiError(null); }}
-                    >
-                      <Text style={styles.aiCancelBtnText}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.aiGenerateBtn, (aiLoading || !aiText.trim()) && styles.btnDisabled]}
-                      onPress={() => handleAiFill(day.key)}
-                      disabled={aiLoading || !aiText.trim()}
-                    >
-                      {aiLoading
-                        ? <ActivityIndicator size="small" color="#fff" />
-                        : <Text style={styles.aiGenerateBtnText}>✦ Generate</Text>
-                      }
-                    </TouchableOpacity>
+              {aiInputDayKey === day.key && (() => {
+                const isRefinement = day.exercises.length > 0;
+                return (
+                  <View style={styles.aiPanel}>
+                    <Text style={styles.aiPanelTitle}>
+                      {isRefinement ? '✦ Refine this day' : '✦ Describe the workout'}
+                    </Text>
+                    <Text style={styles.aiPanelSubtitle}>
+                      {isRefinement
+                        ? 'Describe what to change — AI updates only what you ask'
+                        : 'Arabic, English, or both — AI will structure it for you'}
+                    </Text>
+                    <TextInput
+                      style={[styles.input, styles.aiTextarea]}
+                      placeholder={isRefinement
+                        ? 'e.g. change exercise 1 to barbell row 5x8, increase bench press weight to 40kg...'
+                        : 'e.g. bench press 4x10 wazn 20kg rayyah 30 sania, ba3diha superset dumbbell fly 30kg 4x10'}
+                      placeholderTextColor={colors.textMuted}
+                      value={aiText}
+                      onChangeText={(v) => { setAiText(v); setAiError(null); }}
+                      multiline
+                      numberOfLines={4}
+                      autoFocus
+                      textAlignVertical="top"
+                    />
+                    {aiError && <Text style={styles.aiError}>{aiError}</Text>}
+                    <View style={styles.aiActions}>
+                      <TouchableOpacity
+                        style={styles.aiCancelBtn}
+                        onPress={() => { setAiInputDayKey(null); setAiText(''); setAiError(null); }}
+                      >
+                        <Text style={styles.aiCancelBtnText}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.aiGenerateBtn, (aiLoading || !aiText.trim()) && styles.btnDisabled]}
+                        onPress={() => handleAiFill(day.key)}
+                        disabled={aiLoading || !aiText.trim()}
+                      >
+                        {aiLoading
+                          ? <ActivityIndicator size="small" color="#fff" />
+                          : <Text style={styles.aiGenerateBtnText}>{isRefinement ? '✦ Refine' : '✦ Generate'}</Text>
+                        }
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                </View>
-              )}
+                );
+              })()}
               <View style={styles.addExRow}>
                 <TouchableOpacity
                   style={[styles.addExBtn, { flex: 1 }]}

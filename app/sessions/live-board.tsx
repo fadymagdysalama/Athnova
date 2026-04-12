@@ -7,8 +7,6 @@ import {
   TextInput,
   ActivityIndicator,
   ScrollView,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
@@ -300,6 +298,63 @@ function ExercisePanel({
   );
 }
 
+// ─── In-session exercise editor ───────────────────────────────────────────────
+
+function ExerciseEditPanel({
+  exercises,
+  onUpdate,
+  onClose,
+}: {
+  exercises: Exercise[];
+  onUpdate: (exIdx: number, patch: Partial<Exercise>) => void;
+  onClose: () => void;
+}) {
+  if (exercises.length === 0) return null;
+  return (
+    <View style={styles.editPanel}>
+      <View style={styles.editPanelHeader}>
+        <Text style={styles.editPanelTitle}>✏️ Edit Exercises</Text>
+        <TouchableOpacity onPress={onClose} activeOpacity={0.7}>
+          <Text style={styles.editPanelDone}>Done</Text>
+        </TouchableOpacity>
+      </View>
+      {exercises.map((ex, idx) => (
+        <View key={ex.id} style={styles.editPanelRow}>
+          <TextInput
+            style={styles.editPanelNameInput}
+            value={ex.name}
+            onChangeText={(v) => onUpdate(idx, { name: v })}
+            placeholder="Exercise name"
+            placeholderTextColor={colors.textMuted}
+          />
+          <View style={styles.editPanelMiniRow}>
+            <View style={styles.editPanelMiniGroup}>
+              <Text style={styles.editPanelLabel}>Sets</Text>
+              <TextInput
+                style={styles.editPanelMini}
+                value={String(ex.sets)}
+                onChangeText={(v) => onUpdate(idx, { sets: Math.max(1, parseInt(v, 10) || 1) })}
+                keyboardType="number-pad"
+                maxLength={2}
+              />
+            </View>
+            <View style={[styles.editPanelMiniGroup, { flex: 2 }]}>
+              <Text style={styles.editPanelLabel}>Reps</Text>
+              <TextInput
+                style={styles.editPanelMini}
+                value={ex.reps ?? ''}
+                onChangeText={(v) => onUpdate(idx, { reps: v })}
+                placeholder="e.g. 10-12"
+                placeholderTextColor={colors.textMuted}
+              />
+            </View>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 // ─── Online Client Card ───────────────────────────────────────────────────────
 
 function OnlineClientSlot({
@@ -308,13 +363,16 @@ function OnlineClientSlot({
   onNoteChange,
   onAssignmentChange,
   onGroupChange,
+  onUpdateExercise,
 }: {
   attendee: OnlineAttendee;
   onSetDoneAtIndex: (exIdx: number, sets: number) => void;
   onNoteChange: (text: string) => void;
   onAssignmentChange: (index: number) => void;
   onGroupChange: (groupIdx: number) => void;
+  onUpdateExercise: (exIdx: number, patch: Partial<Exercise>) => void;
 }) {
+  const [isEditing, setIsEditing] = useState(false);
   const slot = attendee.assignments[attendee.assignmentIndex] ?? null;
 
   return (
@@ -329,6 +387,17 @@ function OnlineClientSlot({
             <Text style={styles.clientCardSub}>No program assigned</Text>
           )}
         </View>
+        {slot && slot.exercises.length > 0 && (
+          <TouchableOpacity
+            style={[styles.editWorkoutBtn, isEditing && styles.editWorkoutBtnActive]}
+            onPress={() => setIsEditing((v) => !v)}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.editWorkoutBtnText, isEditing && styles.editWorkoutBtnTextActive]}>
+              {isEditing ? 'View' : '✏️ Edit'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <ProgramPicker
@@ -337,7 +406,15 @@ function OnlineClientSlot({
         onSelect={onAssignmentChange}
       />
 
-      <ExercisePanel slot={slot} onSetDoneAtIndex={onSetDoneAtIndex} onGroupChange={onGroupChange} />
+      {isEditing ? (
+        <ExerciseEditPanel
+          exercises={slot?.exercises ?? []}
+          onUpdate={onUpdateExercise}
+          onClose={() => setIsEditing(false)}
+        />
+      ) : (
+        <ExercisePanel slot={slot} onSetDoneAtIndex={onSetDoneAtIndex} onGroupChange={onGroupChange} />
+      )}
 
       <TextInput
         style={styles.noteInput}
@@ -360,13 +437,16 @@ function OfflineClientSlot({
   onNoteChange,
   onAssignmentChange,
   onGroupChange,
+  onUpdateExercise,
 }: {
   attendee: OfflineAttendee;
   onSetDoneAtIndex: (exIdx: number, sets: number) => void;
   onNoteChange: (text: string) => void;
   onAssignmentChange: (index: number) => void;
   onGroupChange: (groupIdx: number) => void;
+  onUpdateExercise: (exIdx: number, patch: Partial<Exercise>) => void;
 }) {
+  const [isEditing, setIsEditing] = useState(false);
   const slot = attendee.assignments[attendee.assignmentIndex] ?? null;
 
   return (
@@ -383,6 +463,17 @@ function OfflineClientSlot({
             </View>
           )}
         </View>
+        {slot && slot.exercises.length > 0 && (
+          <TouchableOpacity
+            style={[styles.editWorkoutBtn, isEditing && styles.editWorkoutBtnActive]}
+            onPress={() => setIsEditing((v) => !v)}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.editWorkoutBtnText, isEditing && styles.editWorkoutBtnTextActive]}>
+              {isEditing ? 'View' : '✏️ Edit'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <ProgramPicker
@@ -391,7 +482,15 @@ function OfflineClientSlot({
         onSelect={onAssignmentChange}
       />
 
-      <ExercisePanel slot={slot} onSetDoneAtIndex={onSetDoneAtIndex} onGroupChange={onGroupChange} />
+      {isEditing ? (
+        <ExerciseEditPanel
+          exercises={slot?.exercises ?? []}
+          onUpdate={onUpdateExercise}
+          onClose={() => setIsEditing(false)}
+        />
+      ) : (
+        <ExercisePanel slot={slot} onSetDoneAtIndex={onSetDoneAtIndex} onGroupChange={onGroupChange} />
+      )}
 
       <TextInput
         style={styles.noteInput}
@@ -670,6 +769,28 @@ export default function LiveBoardScreen() {
     });
   }
 
+  function updateSlotExercise(attendeeIndex: number, exIdx: number, patch: Partial<Exercise>) {
+    setAttendees((prev) => {
+      const next = [...prev];
+      const a = { ...prev[attendeeIndex] };
+      const assignments = [...a.assignments];
+      const slot = { ...assignments[a.assignmentIndex] };
+      const exercises = [...slot.exercises];
+      exercises[exIdx] = { ...exercises[exIdx], ...patch };
+      slot.exercises = exercises;
+      if (patch.sets !== undefined) {
+        const sd = [...slot.setsDone];
+        sd[exIdx] = 0;
+        slot.setsDone = sd;
+      }
+      assignments[a.assignmentIndex] = slot;
+      a.assignments = assignments;
+      next[attendeeIndex] = a as Attendee;
+      attendeesRef.current = next;
+      return next;
+    });
+  }
+
   async function completeSession(): Promise<{ ok: boolean; errors: string[] }> {
     const errors: string[] = [];
     const current = attendeesRef.current;
@@ -783,12 +904,6 @@ export default function LiveBoardScreen() {
         }),
     );
 
-    // Save coach notes to the sessions table so they appear in session history
-    const sessionNote = current.map(a => a.note.trim()).filter(Boolean).join('\n\n');
-    if (sessionNote) {
-      await supabase.from('sessions').update({ notes: sessionNote }).eq('id', sessionId);
-    }
-
     return { ok: true, errors };
   }
 
@@ -883,16 +998,12 @@ export default function LiveBoardScreen() {
       </View>
 
       {/* ── Client cards ── */}
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={80}
-      >
         <ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           {attendees.length === 0 && (
             <View style={styles.emptyState}>
@@ -913,6 +1024,7 @@ export default function LiveBoardScreen() {
                   }
                   onAssignmentChange={(aIdx) => updateAssignmentIndex(idx, aIdx)}
                   onGroupChange={(gIdx) => updateExerciseIndex(idx, gIdx)}
+                  onUpdateExercise={(exIdx, patch) => updateSlotExercise(idx, exIdx, patch)}
                 />
               );
             }
@@ -926,6 +1038,7 @@ export default function LiveBoardScreen() {
                 }
                 onAssignmentChange={(aIdx) => updateAssignmentIndex(idx, aIdx)}
                 onGroupChange={(gIdx) => updateExerciseIndex(idx, gIdx)}
+                onUpdateExercise={(exIdx, patch) => updateSlotExercise(idx, exIdx, patch)}
               />
             );
           })}
@@ -950,7 +1063,6 @@ export default function LiveBoardScreen() {
             </View>
           )}
         </ScrollView>
-      </KeyboardAvoidingView>
       <AppAlert {...alertProps} />
     </SafeAreaView>
   );
@@ -1182,4 +1294,73 @@ const styles = StyleSheet.create({
     borderColor: colors.success + '40',
   },
   completedBannerText: { color: colors.success, fontSize: fontSize.sm, fontWeight: '700' },
+
+  // ── Edit workout button ───────────────────────────────────────────────
+  editWorkoutBtn: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
+    borderRadius: borderRadius.full,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    backgroundColor: colors.accentFaded,
+  },
+  editWorkoutBtnActive: { backgroundColor: colors.primary },
+  editWorkoutBtnText: { fontSize: 11, fontWeight: '700', color: colors.primary },
+  editWorkoutBtnTextActive: { color: '#fff' },
+
+  // ── Exercise edit panel ───────────────────────────────────────────────
+  editPanel: {
+    backgroundColor: '#F0F9FF',
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+    borderColor: colors.primary + '55',
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  editPanelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  editPanelTitle: { fontSize: fontSize.sm, fontWeight: '800', color: colors.text },
+  editPanelDone: { fontSize: fontSize.sm, fontWeight: '700', color: colors.primary },
+  editPanelRow: {
+    backgroundColor: '#fff',
+    borderRadius: borderRadius.sm,
+    padding: spacing.sm,
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  editPanelNameInput: {
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    fontSize: fontSize.sm,
+    color: colors.text,
+  },
+  editPanelMiniRow: { flexDirection: 'row', gap: spacing.sm },
+  editPanelMiniGroup: { flex: 1, gap: 3 },
+  editPanelLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  editPanelMini: {
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    fontSize: fontSize.sm,
+    color: colors.text,
+    textAlign: 'center',
+  },
 });

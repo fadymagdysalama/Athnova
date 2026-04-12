@@ -75,15 +75,33 @@ Deno.serve(async (req: Request) => {
   );
   const clientsData: any[] = clientsRes.ok ? await clientsRes.json() : [];
 
-  // 2. Program assignments for each client
+  // 2. Program assignments for each online client (explicit FK hint avoids ambiguous embed)
   const clientIds = clientsData.map((c: any) => c.client_id);
   let assignmentsData: any[] = [];
   if (clientIds.length > 0) {
     const assignRes = await fetch(
-      `${supabaseUrl}/rest/v1/program_assignments?client_id=in.(${clientIds.join(',')})&select=client_id,current_day,completed_days,started_at,programs(title,duration_days)`,
+      `${supabaseUrl}/rest/v1/program_assignments?client_id=in.(${clientIds.join(',')})&select=client_id,current_day,started_at,programs!program_assignments_program_id_fkey(title,duration_days)`,
       { headers: serviceHeaders },
     );
     if (assignRes.ok) assignmentsData = await assignRes.json();
+  }
+
+  // 2b. Offline / on-ground clients (no app account)
+  const offlineClientsRes = await fetch(
+    `${supabaseUrl}/rest/v1/offline_clients?coach_id=eq.${coachId}&select=id,display_name,phone,notes,created_at`,
+    { headers: serviceHeaders },
+  );
+  const offlineClientsData: any[] = offlineClientsRes.ok ? await offlineClientsRes.json() : [];
+
+  // 2c. Program assignments for offline clients
+  let offlineAssignmentsData: any[] = [];
+  if (offlineClientsData.length > 0) {
+    const offlineIds = offlineClientsData.map((c: any) => c.id);
+    const offlineAssignRes = await fetch(
+      `${supabaseUrl}/rest/v1/offline_program_assignments?offline_client_id=in.(${offlineIds.join(',')})&select=offline_client_id,current_day,programs!offline_program_assignments_program_id_fkey(title,duration_days)`,
+      { headers: serviceHeaders },
+    );
+    if (offlineAssignRes.ok) offlineAssignmentsData = await offlineAssignRes.json();
   }
 
   // 3. Program-day feedback from clients in the last 30 days
@@ -141,10 +159,13 @@ Deno.serve(async (req: Request) => {
     prsByClient[s.client_id].push(s);
   }
 
-  lines.push(`=== YOUR CLIENTS (${clientsData.length}) ===`);
+  const totalClientCount = clientsData.length + offlineClientsData.length;
+  lines.push(`=== YOUR CLIENTS (${totalClientCount} total: ${clientsData.length} online, ${offlineClientsData.length} on-ground) ===`);
+
+  // ── Online / app clients ──
   for (const c of clientsData) {
     const name = c.profiles?.display_name ?? 'Unknown';
-    const mode = c.client_mode === 'offline' ? 'On Ground' : 'Online';
+    const mode = c.client_mode === 'offline' ? 'On Ground (App)' : 'Online';
     const joined = new Date(c.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     lines.push(`• ${name} (@${c.profiles?.username ?? ''}) [${mode}] — joined ${joined}`);
 
@@ -152,10 +173,10 @@ Deno.serve(async (req: Request) => {
     const assignments = assignmentsData.filter((a: any) => a.client_id === c.client_id);
     if (assignments.length > 0) {
       for (const a of assignments) {
-        const pct = a.programs?.duration_days > 0
-          ? Math.round(((a.completed_days ?? 0) / a.programs.duration_days) * 100)
-          : 0;
-        lines.push(`  Program: ${a.programs?.title ?? 'Program'} — Day ${a.current_day}/${a.programs?.duration_days ?? '?'} (${pct}% done, started ${new Date(a.started_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`);
+        const totalDays: number = a.programs?.duration_days ?? 0;
+        const currentDay: number = a.current_day ?? 1;
+        const pct = totalDays > 0 ? Math.round((currentDay / totalDays) * 100) : 0;
+        lines.push(`  Program: ${a.programs?.title ?? 'Program'} — Day ${currentDay}/${totalDays > 0 ? totalDays : '?'} (${pct}% done, started ${new Date(a.started_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`);
       }
     } else {
       lines.push('  Program: None');
@@ -185,6 +206,31 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // ── On-ground / offline clients (no app account) ──
+  if (offlineClientsData.length > 0) {
+    lines.push('');
+    lines.push('=== ON-GROUND CLIENTS (no app account) ===');
+    for (const c of offlineClientsData) {
+      const joined = new Date(c.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const phonePart = c.phone ? ` | Phone: ${c.phone}` : '';
+      lines.push(`• ${c.display_name} [On Ground]${phonePart} — added ${joined}`);
+      if (c.notes) lines.push(`  Notes: ${c.notes}`);
+
+      // Programs assigned to this offline client
+      const oa = offlineAssignmentsData.filter((a: any) => a.offline_client_id === c.id);
+      if (oa.length > 0) {
+        for (const a of oa) {
+          const totalDays: number = a.programs?.duration_days ?? 0;
+          const currentDay: number = a.current_day ?? 1;
+          const pct = totalDays > 0 ? Math.round((currentDay / totalDays) * 100) : 0;
+          lines.push(`  Program: ${a.programs?.title ?? 'Program'} — Day ${currentDay}/${totalDays > 0 ? totalDays : '?'} (${pct}% done)`);
+        }
+      } else {
+        lines.push('  Program: None');
+      }
+    }
+  }
+
   if (clientFeedbackData.length > 0) {
     lines.push('');
     lines.push(`=== RECENT PROGRAM FEEDBACK (last 30 days) ===`);
@@ -209,9 +255,9 @@ Deno.serve(async (req: Request) => {
 
   const context = lines.join('\n');
 
-  if (clientsData.length === 0) {
+  if (clientsData.length === 0 && offlineClientsData.length === 0) {
     return new Response(
-      JSON.stringify({ answer: "You don't have any connected clients yet. Once clients join, I'll be able to give you updates about their progress, sessions, and feedback." }),
+      JSON.stringify({ answer: "You don't have any connected clients yet. Once clients join or you add on-ground clients, I'll be able to give you updates about their progress, sessions, and feedback." }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   }
@@ -230,7 +276,7 @@ Answer the coach's question using only the data provided above. Be concise, frie
 If a client name is mentioned in the question, match it case-insensitively.
 If the data doesn't contain enough info to answer fully, say so honestly.
 Do not invent data that isn't in the context.
-Respond in the same language the coach used (Arabic or English).`;
+Respond in the same language the coach used. If responding in Arabic, use only formal Modern Standard Arabic (فصحى) — never use dialect (ʿāmmiyya) or slang. If responding in English, use clear, professional English.`;
 
   const groqRes = await fetch(GROQ_API_URL, {
     method: 'POST',
