@@ -40,7 +40,7 @@ interface DocumentState {
   previewDocument: (doc: CoachDocument) => Promise<void>;
 }
 
-const CACHE_DIR = `${FileSystem.documentDirectory}coachero_docs/`;
+const CACHE_DIR = `${FileSystem.documentDirectory}coachera_docs/`;
 
 async function ensureCacheDir() {
   const info = await FileSystem.getInfoAsync(CACHE_DIR);
