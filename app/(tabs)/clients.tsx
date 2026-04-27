@@ -739,7 +739,7 @@ function CoachView() {
               <>
                 <TouchableOpacity
                   style={styles.menuOption}
-                  onPress={() => { setMenuModal(null); Share.share({ message: `Download Coachero and search for @${profile?.username ?? 'your coach'} to connect as an online client!` }); }}
+                  onPress={() => { setMenuModal(null); Share.share({ message: `Download Coachera and search for @${profile?.username ?? 'your coach'} to connect as an online client!` }); }}
                 >
                   <View style={styles.menuOptionText}>
                     <Text style={styles.menuOptionTitle}>Invite to join online</Text>
