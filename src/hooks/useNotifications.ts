@@ -31,12 +31,17 @@ async function registerForPushNotificationsAsync(): Promise<string | null> {
   if (finalStatus !== 'granted') return null;
 
   try {
-    const projectId =
-      Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
-    const tokenData = projectId
-      ? await Notifications.getExpoPushTokenAsync({ projectId })
-      : await Notifications.getExpoPushTokenAsync();
-    return tokenData.data;
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+    let token: string | null = null;
+
+    if (Platform.OS === 'ios') {
+      const { data } = await Notifications.getDevicePushTokenAsync();
+      token = data;
+    } else if (projectId) {
+      const { data } = await Notifications.getExpoPushTokenAsync({ projectId });
+      token = data;
+    }
+    return token;
   } catch {
     return null;
   }
@@ -80,13 +85,12 @@ export function useNotifications() {
 
     const userId = session.user.id;
 
-    // 1. Register push token and save it to the profile row
     registerForPushNotificationsAsync().then(async (token) => {
       if (!token) return;
-      await supabase
-        .from('profiles')
-        .update({ expo_push_token: token } as any)
-        .eq('id', userId);
+await supabase
+    .from('profiles')
+    .update({ push_token: token })
+    .eq('id', userId);
     });
 
     // 2. Fetch existing in-app notifications

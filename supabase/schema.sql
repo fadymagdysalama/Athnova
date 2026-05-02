@@ -522,8 +522,11 @@ CREATE POLICY "Coaches can view client strength logs" ON strength_logs
 -- after the initial schema has been applied.
 -- =====================================================
 
--- 1. Add Expo push token column to profiles
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS expo_push_token TEXT;
+-- 1. Rename expo_push_token to push_token (if it exists from Expo migration)
+ALTER TABLE profiles RENAME COLUMN expo_push_token TO push_token;
+
+-- 2. If column doesn't exist, add it
+-- ALTER TABLE profiles ADD COLUMN IF NOT EXISTS push_token TEXT;
 
 -- 2. Notifications RLS — the send-push Edge Function uses the service role key
 --    and therefore bypasses RLS automatically. No additional INSERT policy is

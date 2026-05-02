@@ -16,7 +16,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.coachera.app"
+      "bundleIdentifier": "com.coachera.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -25,7 +28,10 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.coachera.app"
+      "package": "com.coachera.app",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -46,6 +52,13 @@
         }
       ],
       "expo-web-browser"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "8076e024-e4ca-417a-b545-6795e8886195"
+      }
+    },
+    "owner": "fadysalama"
   }
 }
