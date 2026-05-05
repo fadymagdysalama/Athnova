@@ -14,6 +14,7 @@ interface AuthState {
   signUp: (username: string, password: string) => Promise<{ error: string | null }>;
   signIn: (username: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<{ error: string | null }>;
   setProfile: (profile: Profile) => void;
   createProfile: (username: string, displayName: string, role: UserRole) => Promise<{ error: string | null }>;
   fetchProfile: () => Promise<void>;
@@ -129,6 +130,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signOut: async () => {
     await supabase.auth.signOut();
     set({ session: null, profile: null, pendingUsername: '' });
+  },
+
+  deleteAccount: async () => {
+    const session = get().session;
+    if (!session?.user) {
+      return { error: 'Not authenticated' };
+    }
+
+    const userId = session.user.id;
+
+    const { error: funcError } = await supabase.functions.invoke('delete-account', {
+      body: { userId },
+    });
+
+    if (funcError) {
+      return { error: funcError.message };
+    }
+
+    await supabase.auth.signOut();
+    set({ session: null, profile: null, pendingUsername: '' });
+    return { error: null };
   },
 
   setProfile: (profile: Profile) => {

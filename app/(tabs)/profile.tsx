@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -12,9 +12,10 @@ import i18n from '../../src/i18n';
 
 export default function ProfileScreen() {
   const { t } = useTranslation();
-  const { profile, signOut } = useAuthStore();
+  const { profile, signOut, deleteAccount } = useAuthStore();
   const { coachSubscription, fetchCoachSubscription } = useMarketplaceStore();
   const { alertProps, showAlert } = useAppAlert();
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (profile?.role === 'coach') {
@@ -33,7 +34,35 @@ export default function ProfileScreen() {
         {
           text: 'Sign Out',
           style: 'destructive',
-          onPress: () => signOut(), // let onAuthStateChange + index.tsx handle navigation
+          onPress: () => signOut(),
+        },
+      ],
+    });
+  };
+
+  const handleDeleteAccount = () => {
+    showAlert({
+      title: 'Delete Account',
+      message: 'This will permanently delete your account and all associated data. This action cannot be undone.',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setIsDeleting(true);
+            const { error } = await deleteAccount();
+            setIsDeleting(false);
+            if (error) {
+              showAlert({
+                title: 'Error',
+                message: error,
+                buttons: [{ text: 'OK' }],
+              });
+            } else {
+              router.replace('/auth/login');
+            }
+          },
         },
       ],
     });
@@ -126,6 +155,14 @@ export default function ProfileScreen() {
             variant="outline"
             style={styles.signOutButton}
             textStyle={{ color: colors.error }}
+          />
+
+          <Button
+            title={isDeleting ? 'Deleting...' : 'Delete Account'}
+            onPress={handleDeleteAccount}
+            variant="danger"
+            style={styles.deleteButton}
+            disabled={isDeleting}
           />
         </View>
 
@@ -265,6 +302,9 @@ const styles = StyleSheet.create({
   },
   signOutButton: {
     borderColor: colors.error,
+  },
+  deleteButton: {
+    marginTop: spacing.sm,
   },
   version: {
     color: colors.textMuted,
