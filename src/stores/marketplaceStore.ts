@@ -1,6 +1,14 @@
 import { create } from 'zustand';
 import { invokeEdgeFunction } from '../lib/invokeEdgeFunction';
 import { supabase } from '../lib/supabase';
+import {
+  initializeIAP,
+  getSubscriptionProducts,
+  purchaseSubscription,
+  finishPurchase,
+  shouldUseIAP,
+  IAP_PRODUCT_SKUS,
+} from '../lib/iap';
 import type {
   PublicProgram,
   ProgramPurchase,
@@ -9,11 +17,19 @@ import type {
   ProgramDayWithExercises,
 } from '../types';
 
+interface IAPProduct {
+  productId: string;
+  localizedPrice: string;
+  subscriptionPeriodUnitIOS: string;
+  subscriptionPeriodValueIOS: number;
+}
+
 interface MarketplaceState {
   publicPrograms: PublicProgram[];
   purchases: ProgramPurchase[];
   coachSubscription: CoachSubscription | null;
   isLoading: boolean;
+  iapProducts: IAPProduct[];
 
   // Browse
   fetchPublicPrograms: () => Promise<void>;
@@ -29,15 +45,18 @@ interface MarketplaceState {
     error: string | null;
   }>;
 
-  // Purchase flow (Paymob → browser payment → Supabase insert via webhook)
-  // Returns paymentUrl for paid programs; app opens it in the device browser.
+  // Purchase flow - uses IAP on iOS, Paymob on other platforms
   purchaseProgram: (programId: string) => Promise<{ error: string | null; paymentUrl?: string }>;
+
+  // IAP specific functions
+  initializeIAPProducts: () => Promise<void>;
+  getIAPProducts: () => IAPProduct[];
 
   // Coach: toggle public visibility
   togglePublish: (programId: string, isPublished: boolean) => Promise<{ error: string | null }>;
   setPrice: (programId: string, price: number | null) => Promise<{ error: string | null }>;
 
-  // Coach: subscription
+  // Coach: subscription - uses IAP on iOS, Paymob on other platforms
   fetchCoachSubscription: () => Promise<void>;
   upgradeSubscription: (tier: SubscriptionTier) => Promise<{ error: string | null; paymentUrl?: string }>;
   cancelSubscription: () => Promise<{ error: string | null }>;
@@ -48,6 +67,30 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   purchases: [],
   coachSubscription: null,
   isLoading: false,
+  iapProducts: [],
+
+  // ─── IAP Functions ─────────────────────────────────────────────────────────
+  initializeIAPProducts: async () => {
+    if (!shouldUseIAP) return;
+    
+    try {
+      await initializeIAP();
+      const products = await getSubscriptionProducts();
+      const mappedProducts: IAPProduct[] = products.map((p) => ({
+        productId: p.id,
+        localizedPrice: p.displayPrice,
+        subscriptionPeriodUnitIOS: 'month',
+        subscriptionPeriodValueIOS: 1,
+      }));
+      set({ iapProducts: mappedProducts });
+    } catch (error) {
+      console.error('Failed to initialize IAP products:', error);
+    }
+  },
+
+  getIAPProducts: () => {
+    return get().iapProducts;
+  },
 
   // ─── Browse public programs ───────────────────────────────────────────────
   fetchPublicPrograms: async () => {
@@ -220,7 +263,7 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
 
   // ─── Coach: upgrade or create subscription ────────────────────────────────
   // Starter tier is free — write directly to DB.
-  // Pro / Business tiers go through Paymob; the webhook records the subscription.
+  // Pro tier: Use IAP on iOS, Paymob on Android/Web.
   upgradeSubscription: async (tier) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: 'Not authenticated' };
@@ -251,7 +294,52 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
       return { error: null };
     }
 
-    // Pro / Business — initiate Paymob payment
+    // Pro tier: Use IAP on iOS
+    if (shouldUseIAP) {
+      await initializeIAP();
+      const products = await getSubscriptionProducts();
+      
+      if (products.length === 0) {
+        return { error: 'No subscription products available. Please check App Store Connect.' };
+      }
+
+      // Use monthly subscription
+      const product = products.find(p => p.id === IAP_PRODUCT_SKUS.MONTHLY_PRO);
+      
+      if (!product) {
+        return { error: 'Monthly subscription product not found' };
+      }
+      
+      const result = await purchaseSubscription(product.id);
+      
+      if (!result.success) {
+        if (result.error === 'cancelled') {
+          return { error: null }; // User cancelled, not an error
+        }
+        return { error: result.error || 'Purchase failed' };
+      }
+
+      // Verify receipt on backend
+      try {
+        const { error: fnError } = await invokeEdgeFunction<{ error?: string }>('verify-iap-subscription', {
+          receipt: result.receipt,
+          productId: product.id,
+          userId: user.id,
+        });
+
+        if (fnError) {
+          console.error('Failed to verify IAP subscription:', fnError);
+        }
+      } catch (verifyError) {
+        console.error('Receipt verification error:', verifyError);
+      }
+
+      // Update local subscription state
+      await get().fetchCoachSubscription();
+      return { error: null };
+    }
+
+    // Non-iOS: Use Paymob (existing behavior)
     const { data: orderData, error: fnError, status, responseText } = await invokeEdgeFunction<{
       paymentUrl?: string;
       error?: string;
@@ -264,8 +352,6 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
     if (orderData?.error) return { error: orderData.error };
     if (!orderData?.paymentUrl) return { error: 'Missing payment URL from paymob-subscription' };
 
-    // Return paymentUrl — the screen opens it in the browser.
-    // Subscription is recorded by paymob-webhook after successful payment.
     return { error: null, paymentUrl: orderData.paymentUrl };
   },
 

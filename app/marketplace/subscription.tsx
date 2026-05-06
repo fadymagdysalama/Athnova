@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useMarketplaceStore } from '../../src/stores/marketplaceStore';
+import { shouldUseIAP } from '../../src/lib/iap';
 import { AppAlert, useAppAlert } from '../../src/components/AppAlert';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 import type { SubscriptionTier } from '../../src/types';
@@ -66,7 +67,7 @@ const TIERS: TierConfig[] = [
 export default function SubscriptionScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { coachSubscription, fetchCoachSubscription, upgradeSubscription, cancelSubscription } = useMarketplaceStore();
+  const { coachSubscription, fetchCoachSubscription, upgradeSubscription, cancelSubscription, initializeIAPProducts } = useMarketplaceStore();
   const [loading, setLoading] = useState(true);
   const [upgrading, setUpgrading] = useState<SubscriptionTier | null>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -74,7 +75,14 @@ export default function SubscriptionScreen() {
   const awaitingPayment = useRef(false);
 
   useEffect(() => {
-    fetchCoachSubscription().then(() => setLoading(false));
+    const init = async () => {
+      await fetchCoachSubscription();
+      if (shouldUseIAP) {
+        await initializeIAPProducts();
+      }
+      setLoading(false);
+    };
+    init();
   }, []);
 
   // Refresh subscription when user returns from the Paymob browser payment

@@ -12,7 +12,7 @@
 // =====================================================
 
 const TIER_PRICES_CENTS: Record<string, number> = {
-  pro: 25000,    // 250 EGP
+  pro: 24999,    // 249.99 EGP
   business: 49900, // 499 EGP
 };
 

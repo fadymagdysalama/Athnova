@@ -227,7 +227,7 @@ export default {
     starterFeature4: 'Up to 30 custom exercises',
     starterFeature5: 'Full scheduling, live board & chat',
     proName: 'Pro',
-    proPrice: 'EGP 250',
+    proPrice: 'EGP 249.99',
     proFeature1: 'Unlimited online clients',
     proFeature2: 'Unlimited on ground clients',
     proFeature3: 'Unlimited programs',

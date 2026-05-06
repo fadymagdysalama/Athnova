@@ -225,7 +225,7 @@ export default {
     starterFeature4: 'حتى 30 تمريناً مخصصاً',
     starterFeature5: 'كامل المواعيد واللوح المباشر والمحادثة',
     proName: 'المحترف',
-    proPrice: 'EGP 250',
+    proPrice: 'EGP 249.99',
     proFeature1: 'عملاء غير محدودين عبر التطبيق',
     proFeature2: 'عملاء غير محدودين بدون حساب',
     proFeature3: 'برامج غير محدودة',
