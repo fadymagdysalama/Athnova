@@ -33,20 +33,34 @@ export const getSubscriptionProducts = async (): Promise<Product[]> => {
   if (!shouldUseIAP) return [];
   
   try {
-    console.log('Fetching with SKU:', IAP_PRODUCT_SKUS.MONTHLY_PRO);
-    
-    // Try fetching ALL subscription products (no SKU filter)
-    const allProducts = await fetchProducts({ type: 'subs' });
-    console.log('All subscription products:', allProducts);
-    
-    // Also try with specific SKU
+    await initializeIAP();
+
+    console.log('Fetching subscriptions with SKU:', IAP_PRODUCT_SKUS.MONTHLY_PRO);
+
+    // Try getSubscriptions first
+    try {
+      const mod = await import('react-native-iap');
+      const getSubs = (mod as any).getSubscriptions as Function;
+      if (getSubs) {
+        const products = await getSubs({
+          skus: [IAP_PRODUCT_SKUS.MONTHLY_PRO],
+        });
+        console.log('Subscriptions (getSubscriptions):', products);
+        return products || [];
+      }
+    } catch (e) {
+      console.log('getSubscriptions not available, trying fetchProducts');
+    }
+
+    // Fallback to fetchProducts - MUST provide skus
     const products = await fetchProducts({ 
       skus: [IAP_PRODUCT_SKUS.MONTHLY_PRO], 
       type: 'subs' 
     });
-    console.log('Specific products:', products);
-    
-    return products || allProducts || [];
+
+    console.log('Subscriptions (fetchProducts):', products);
+
+    return products || [];
   } catch (error) {
     console.error('Failed to get subscription products:', error);
     return [];
