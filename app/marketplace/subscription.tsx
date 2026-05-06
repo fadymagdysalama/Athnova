@@ -8,13 +8,15 @@ import {
   ActivityIndicator,
   AppState,
   Platform,
+  Linking,
 } from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as WebBrowser from 'expo-web-browser';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useMarketplaceStore } from '../../src/stores/marketplaceStore';
 import { shouldUseIAP } from '../../src/lib/iap';
+import { restorePurchases } from 'react-native-iap';
 import { AppAlert, useAppAlert } from '../../src/components/AppAlert';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 import type { SubscriptionTier } from '../../src/types';
@@ -71,6 +73,21 @@ export default function SubscriptionScreen() {
   const [loading, setLoading] = useState(true);
   const [upgrading, setUpgrading] = useState<SubscriptionTier | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  
+  const handleRestore = async () => {
+    showAlert({
+      title: t('subscription.restoreTitle'),
+      message: t('subscription.restoreDesc'),
+      buttons: [{ text: 'Cancel', style: 'cancel' }],
+    });
+    try {
+      await restorePurchases();
+      showAlert({ title: t('subscription.restoreSuccess') });
+    } catch (error) {
+      console.error('Restore failed:', error);
+      showAlert({ title: t('subscription.restoreNone') });
+    }
+  };
   const { alertProps, showAlert } = useAppAlert();
   const awaitingPayment = useRef(false);
 
@@ -310,6 +327,32 @@ export default function SubscriptionScreen() {
         <Text style={styles.footnote}>
           {t('subscription.footnote')}
         </Text>
+
+        {/* Restore Purchases - required by Apple */}
+        <TouchableOpacity
+          style={styles.restoreBtn}
+          onPress={handleRestore}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.restoreBtnText}>{t('subscription.restorePurchases')}</Text>
+        </TouchableOpacity>
+
+        {/* Links - required by Apple */}
+        <View style={styles.linksContainer}>
+          <Text 
+            style={styles.linkText} 
+            onPress={() => Linking.openURL('https://resume-three-smoky.vercel.app/coachera/privacy')}
+          >
+            {t('subscription.privacyPolicy')}
+          </Text>
+          <Text style={styles.linkDivider}> | </Text>
+          <Text 
+            style={styles.linkText} 
+            onPress={() => Linking.openURL('https://www.apple.com/legal/internet-services/itunes/dev/stdeula/')}
+          >
+            {t('subscription.termsOfUse')}
+          </Text>
+        </View>
       </ScrollView>
       <AppAlert {...alertProps} />
     </SafeAreaView>
@@ -462,5 +505,35 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: spacing['2xl'],
     lineHeight: 18,
+  },
+
+  // Restore Purchases - required by Apple
+  restoreBtn: {
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    marginTop: spacing.md,
+  },
+  restoreBtnText: {
+    fontSize: fontSize.sm,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+
+  // Links - required by Apple
+  linksContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: spacing.sm,
+    gap: 2,
+  },
+  linkText: {
+    fontSize: fontSize.xs,
+    color: colors.primary,
+    textDecorationLine: 'underline',
+  },
+  linkDivider: {
+    fontSize: fontSize.xs,
+    color: colors.textMuted,
   },
 });
