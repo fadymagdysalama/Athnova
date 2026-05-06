@@ -19,10 +19,6 @@
       "bundleIdentifier": "com.coachera.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
-      },
-      "entitlements": {
-        "com.apple.developer.in-app-payments": ["merchant.com.coachera.app"],
-        "aps-environment": "development"
       }
     },
     "android": {
