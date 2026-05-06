@@ -42,6 +42,7 @@
       "bundler": "metro"
     },
     "plugins": [
+      "react-native-iap",
       "expo-router",
       "expo-localization",
       "expo-secure-store",
